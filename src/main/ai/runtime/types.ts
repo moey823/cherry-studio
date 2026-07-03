@@ -56,7 +56,7 @@ export type AgentRuntimeEvent =
   | { type: 'compaction-start'; trigger?: AgentSessionCompactionTrigger }
   | { type: 'compaction-complete'; anchor?: AgentSessionCompactionAnchorData }
   | { type: 'compaction-error'; error: string }
-  | { type: 'context-usage'; usage: AgentSessionContextUsage; capturedAt?: string }
+  | { type: 'context-usage'; usage: AgentSessionContextUsage; capturedAt?: number }
   | { type: 'error'; error: unknown }
 
 export interface AgentRuntimeConnection {

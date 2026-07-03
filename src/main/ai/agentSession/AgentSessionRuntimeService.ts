@@ -120,7 +120,7 @@ type AgentSessionRuntimeEntry = {
    *  persisted by the provider — these do NOT create a new user row). */
   rollSteerInputs?: AgentRuntimeUserInput[]
   compacting?: boolean
-  contextUsageLatestCapturedAt?: string
+  contextUsageLatestCapturedAt?: number
   contextUsageCaptureSequence?: number
   contextUsageLatestCaptureSequence?: number
   ignoreContextUsageEventsUntilNextTurn?: boolean
@@ -128,7 +128,6 @@ type AgentSessionRuntimeEntry = {
 
 type ContextUsagePersistOptions = {
   allowClosed?: boolean
-  cacheMode?: 'live' | 'snapshot'
   captureSequence?: number
 }
 
@@ -504,12 +503,12 @@ export class AgentSessionRuntimeService extends BaseService {
     return this.entries.get(entry.sessionId) === entry
   }
 
-  private beginContextUsageCapture(entry: AgentSessionRuntimeEntry): { capturedAt: string; sequence: number } {
+  private beginContextUsageCapture(entry: AgentSessionRuntimeEntry): { capturedAt: number; sequence: number } {
     const sequence = (entry.contextUsageCaptureSequence ?? 0) + 1
-    const capturedAt = new Date().toISOString()
+    const capturedAt = Date.now()
     entry.contextUsageCaptureSequence = sequence
     entry.contextUsageLatestCaptureSequence = sequence
-    if (!entry.contextUsageLatestCapturedAt || capturedAt > entry.contextUsageLatestCapturedAt) {
+    if (entry.contextUsageLatestCapturedAt === undefined || capturedAt > entry.contextUsageLatestCapturedAt) {
       entry.contextUsageLatestCapturedAt = capturedAt
     }
     return { capturedAt, sequence }
@@ -517,11 +516,13 @@ export class AgentSessionRuntimeService extends BaseService {
 
   private acceptContextUsageCapture(
     entry: AgentSessionRuntimeEntry,
-    capturedAt: string,
+    capturedAt: number,
     sequence?: number
-  ): string | undefined {
+  ): number | undefined {
     if (sequence !== undefined && sequence < (entry.contextUsageLatestCaptureSequence ?? 0)) return undefined
-    if (entry.contextUsageLatestCapturedAt && capturedAt < entry.contextUsageLatestCapturedAt) return undefined
+    if (entry.contextUsageLatestCapturedAt !== undefined && capturedAt < entry.contextUsageLatestCapturedAt) {
+      return undefined
+    }
     entry.contextUsageLatestCapturedAt = capturedAt
     return capturedAt
   }
@@ -564,7 +565,10 @@ export class AgentSessionRuntimeService extends BaseService {
     entry.connection = connection
     this.refreshContextUsage(entry, connection)
     entry.connectionLoop = this.runConnectionLoop(entry, connection).finally(() => {
-      if (entry.connection === connection) entry.connection = undefined
+      if (entry.connection === connection) {
+        entry.connection = undefined
+        this.deleteContextUsageCache(entry.sessionId)
+      }
       if (entry.connectionLoop) entry.connectionLoop = undefined
     })
     return true
@@ -632,9 +636,7 @@ export class AgentSessionRuntimeService extends BaseService {
         break
       case 'context-usage':
         if (entry.ignoreContextUsageEventsUntilNextTurn) break
-        this.persistContextUsage(entry, event.usage, event.capturedAt ?? new Date().toISOString(), {
-          cacheMode: 'live'
-        })
+        this.persistContextUsage(entry, event.usage, event.capturedAt ?? Date.now())
         break
       case 'turn-complete':
         this.closeCurrentTurn(entry, 'success')
@@ -719,7 +721,7 @@ export class AgentSessionRuntimeService extends BaseService {
   private persistContextUsage(
     entry: AgentSessionRuntimeEntry,
     usage: AgentSessionContextUsage,
-    capturedAt: string,
+    capturedAt: number,
     options: ContextUsagePersistOptions = {}
   ): void {
     const currentEntry = this.entries.get(entry.sessionId)
@@ -727,13 +729,9 @@ export class AgentSessionRuntimeService extends BaseService {
     if (!isCurrent && !options.allowClosed) return
     if (currentEntry && !isCurrent) return
     const acceptedCapturedAt = this.acceptContextUsageCapture(entry, capturedAt, options.captureSequence)
-    if (!acceptedCapturedAt) return
+    if (acceptedCapturedAt === undefined) return
 
-    const snapshot = { usage, capturedAt: acceptedCapturedAt }
-    if (options.cacheMode === 'snapshot') {
-      if (!currentEntry)
-        application.get('CacheService').setShared(AGENT_SESSION_CONTEXT_USAGE_CACHE_KEY(entry.sessionId), snapshot)
-    } else if (isCurrent) {
+    if (isCurrent) {
       application.get('CacheService').setShared(AGENT_SESSION_CONTEXT_USAGE_CACHE_KEY(entry.sessionId), usage)
     }
     try {
@@ -1092,8 +1090,9 @@ export class AgentSessionRuntimeService extends BaseService {
     }
     entry.compacting = false
 
-    this.refreshContextUsage(entry, entry.connection, { allowClosed: true, cacheMode: 'snapshot' })
+    this.refreshContextUsage(entry, entry.connection, { allowClosed: true })
     const connection = this.closeConnection(entry)
+    if (!connection) this.deleteContextUsageCache(entry.sessionId)
     entry.currentTurn = undefined
     entry.startingNextTurn = false
 
@@ -1125,7 +1124,12 @@ export class AgentSessionRuntimeService extends BaseService {
     const connection = entry.connection
     entry.connection = undefined
     entry.connectionLoop = undefined
+    if (connection) this.deleteContextUsageCache(entry.sessionId)
     return connection
+  }
+
+  private deleteContextUsageCache(sessionId: string): void {
+    application.get('CacheService').deleteShared(AGENT_SESSION_CONTEXT_USAGE_CACHE_KEY(sessionId))
   }
 }
 
