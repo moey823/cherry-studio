@@ -16,7 +16,7 @@ import { agentWorkspaceService, rowToAgentWorkspace } from '@data/services/Agent
 import { pinService } from '@data/services/PinService'
 import { nullsToUndefined, timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
-import type { AgentSessionContextUsage } from '@shared/ai/agentSessionContextUsage'
+import type { AgentSessionContextUsage, AgentSessionContextUsageSnapshot } from '@shared/ai/agentSessionContextUsage'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { CursorPaginationResponse } from '@shared/data/api/apiTypes'
 import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
@@ -256,13 +256,17 @@ export class AgentSessionService {
     return row
   }
 
-  upsertContextUsageSnapshot(sessionId: string, usage: AgentSessionContextUsage, capturedAt = Date.now()): void {
+  upsertContextUsageSnapshot(
+    sessionId: string,
+    usage: AgentSessionContextUsage,
+    capturedAt = Date.now()
+  ): AgentSessionContextUsageSnapshot | undefined {
     const snapshot = {
       usage,
       capturedAt
     }
 
-    withSqliteErrors(
+    return withSqliteErrors(
       () =>
         application.get('DbService').withWriteTx((tx) => {
           const [current] = tx
@@ -275,7 +279,7 @@ export class AgentSessionService {
             current?.contextUsage?.capturedAt !== undefined &&
             current.contextUsage.capturedAt > snapshot.capturedAt
           ) {
-            return
+            return undefined
           }
 
           tx.insert(agentSessionStateTable)
@@ -285,6 +289,8 @@ export class AgentSessionService {
               set: { contextUsage: snapshot }
             })
             .run()
+
+          return snapshot
         }),
       {
         ...defaultHandlersFor('Session context usage', sessionId),

@@ -128,6 +128,7 @@ describe('AgentSessionRuntimeService', () => {
     mocks.getLastRuntimeResumeToken.mockReturnValue(null)
     mocks.findPendingAssistantMessageIds.mockReturnValue([])
     mocks.markMessagesError.mockReturnValue(undefined)
+    mocks.upsertContextUsageSnapshot.mockImplementation((_sessionId, usage, capturedAt) => ({ usage, capturedAt }))
     mocks.applicationGet.mockImplementation((name: string) => {
       if (name === 'AiStreamManager') {
         return {
@@ -699,6 +700,12 @@ describe('AgentSessionRuntimeService', () => {
       expect(mocks.cacheSetShared).toHaveBeenCalledWith('agent.session.context_usage.session-1', usage)
     )
     expect(mocks.upsertContextUsageSnapshot).toHaveBeenCalledWith('session-1', usage, expect.any(Number))
+    await vi.waitFor(() =>
+      expect(mocks.cacheSetShared).toHaveBeenCalledWith('agent.session.context_usage_snapshot.session-1', {
+        usage,
+        capturedAt: expect.any(Number)
+      })
+    )
 
     events.push({ type: 'turn-complete' })
     await expect(reader.read()).resolves.toMatchObject({ done: true })

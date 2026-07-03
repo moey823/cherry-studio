@@ -2,7 +2,7 @@ import type { McpTool } from '@shared/types/mcp'
 import type { UpdateInfo } from 'builder-util-runtime'
 
 import type { AgentSessionCompactionState } from '../../ai/agentSessionCompaction'
-import type { AgentSessionContextUsage } from '../../ai/agentSessionContextUsage'
+import type { AgentSessionContextUsage, AgentSessionContextUsageSnapshot } from '../../ai/agentSessionContextUsage'
 import type { ExternalAppId } from '../../types/externalApp'
 import type { MiniApp } from '../types/miniApp'
 import type { WebSearchStatus } from '../types/webSearch'
@@ -126,6 +126,7 @@ export type CachePaintingGenerationState = {
 }
 
 export type CacheAgentSessionContextUsage = AgentSessionContextUsage | null
+export type CacheAgentSessionContextUsageSnapshot = AgentSessionContextUsageSnapshot | null
 export type CacheAgentSessionCompactionState = AgentSessionCompactionState | null
 
 /**
