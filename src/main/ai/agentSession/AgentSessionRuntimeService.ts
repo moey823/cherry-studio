@@ -1,5 +1,6 @@
 import { agentService } from '@data/services/AgentService'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
+import { agentSessionService } from '@data/services/AgentSessionService'
 import { loggerService } from '@logger'
 import { serializeError } from '@main/ai/utils/serializeError'
 import { application } from '@main/core/application'
@@ -674,6 +675,11 @@ export class AgentSessionRuntimeService extends BaseService {
   private persistContextUsage(entry: AgentSessionRuntimeEntry, usage: AgentSessionContextUsage): void {
     if (!this.isCurrentEntry(entry)) return
     application.get('CacheService').setShared(AGENT_SESSION_CONTEXT_USAGE_CACHE_KEY(entry.sessionId), usage)
+    try {
+      agentSessionService.upsertContextUsageSnapshot(entry.sessionId, usage)
+    } catch (error) {
+      logger.warn('Failed to persist agent session context usage snapshot', { sessionId: entry.sessionId, error })
+    }
   }
 
   private handleRuntimeError(entry: AgentSessionRuntimeEntry, error: unknown): void {
@@ -1023,7 +1029,6 @@ export class AgentSessionRuntimeService extends BaseService {
       })
     }
     entry.compacting = false
-    application.get('CacheService').deleteShared(AGENT_SESSION_CONTEXT_USAGE_CACHE_KEY(entry.sessionId))
 
     const connection = this.closeConnection(entry)
     entry.currentTurn = undefined

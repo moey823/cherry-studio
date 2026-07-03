@@ -689,6 +689,7 @@ const AgentChatSessionFrame = ({
       agentName={activeAgent?.name}
       agentAvatar={activeAgent ? getAgentAvatarFromConfiguration(activeAgent.configuration) : undefined}
       modelFallback={runtime.fallbackSnapshot}
+      lastContextUsage={session.lastContextUsage}
       defaultOpen={sessionPaneOpen}
       onOpenChange={onSessionPaneOpenChange}
       resourcePane={resourcePane}

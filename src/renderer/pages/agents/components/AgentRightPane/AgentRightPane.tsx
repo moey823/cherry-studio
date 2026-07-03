@@ -41,6 +41,7 @@ import { useIsTextFile } from '@renderer/hooks/useIsTextFile'
 import { type Topic, TopicType, type TopicType as TopicTypeEnum } from '@renderer/types/topic'
 import { buildAgentSessionTopicId } from '@renderer/utils/agentSession'
 import { cn } from '@renderer/utils/style'
+import type { AgentSessionContextUsageSnapshot } from '@shared/ai/agentSessionContextUsage'
 import type { CherryMessagePart, CherryUIMessage, ModelSnapshot } from '@shared/data/types/message'
 import {
   Activity,
@@ -123,6 +124,7 @@ interface AgentRightPaneMeta {
   agentName?: string
   agentAvatar?: string
   modelFallback?: ModelSnapshot
+  lastContextUsage?: AgentSessionContextUsageSnapshot | null
   filesEnabled?: boolean
   statusEnabled?: boolean
 }
@@ -209,6 +211,7 @@ function AgentRightPaneStateProvider({
   agentAvatar,
   filesEnabled = true,
   modelFallback,
+  lastContextUsage,
   statusEnabled = true
 }: AgentRightPaneProviderProps) {
   const { activeTab } = useShellState()
@@ -341,6 +344,7 @@ function AgentRightPaneStateProvider({
         agentAvatar,
         filesEnabled,
         modelFallback,
+        lastContextUsage,
         statusEnabled
       }
     }),
@@ -358,6 +362,7 @@ function AgentRightPaneStateProvider({
       filePreview,
       flow,
       flowTabs,
+      lastContextUsage,
       modelFallback,
       openArtifactFile,
       openAgentToolFlow,
@@ -555,7 +560,11 @@ function AgentAgentRightPaneStatusPanel() {
   const { state, meta } = useAgentRightPane()
   const { t } = useTranslation()
   const { status } = state
-  const { usage, percentage } = useAgentSessionContextUsage(meta.sessionId)
+  const { usage, percentage, source, capturedAt } = useAgentSessionContextUsage(
+    meta.sessionId,
+    undefined,
+    meta.lastContextUsage
+  )
   const compaction = useAgentSessionCompaction(meta.sessionId)
   const isCompacting = compaction.status === 'compacting'
   const contextUsageColor = percentage === null ? undefined : getAgentContextUsageColor(percentage)
@@ -599,6 +608,8 @@ function AgentAgentRightPaneStatusPanel() {
         percentage={percentage}
         color={contextUsageColor}
         isCompacting={isCompacting}
+        source={source}
+        capturedAt={capturedAt}
         className="rounded-md border border-border-subtle px-3 py-2"
       />
       <AgentRightPaneHighlights includeTasks={false} />
@@ -859,7 +870,11 @@ function AgentRightPaneHighlights({
 // Reads the same persisted usage data the Status tab renders.
 function AgentRightPaneStatusPreview() {
   const { meta } = useAgentRightPane()
-  const { usage, percentage } = useAgentSessionContextUsage(meta.sessionId)
+  const { usage, percentage, source, capturedAt } = useAgentSessionContextUsage(
+    meta.sessionId,
+    undefined,
+    meta.lastContextUsage
+  )
   const compaction = useAgentSessionCompaction(meta.sessionId)
   const isCompacting = compaction.status === 'compacting'
   const contextUsageColor = percentage === null ? undefined : getAgentContextUsageColor(percentage)
@@ -871,6 +886,8 @@ function AgentRightPaneStatusPreview() {
         percentage={percentage}
         color={contextUsageColor}
         isCompacting={isCompacting}
+        source={source}
+        capturedAt={capturedAt}
       />
       <AgentRightPaneHighlights compact />
     </Scrollbar>

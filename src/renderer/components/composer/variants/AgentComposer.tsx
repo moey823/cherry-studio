@@ -40,6 +40,7 @@ import { buildFilePartsForAttachments } from '@renderer/utils/file/buildFilePart
 import { getSendMessageShortcutLabel } from '@renderer/utils/input'
 import type { ComposerAttachment } from '@renderer/utils/message/composerAttachment'
 import { cn } from '@renderer/utils/style'
+import type { AgentSessionContextUsageSnapshot } from '@shared/ai/agentSessionContextUsage'
 import type { ComposerQueuedMessagePayload } from '@shared/ai/transport'
 import type { AgentWorkspaceEntity } from '@shared/data/api/schemas/agentWorkspaces'
 import type { AgentEntity } from '@shared/data/types/agent'
@@ -119,6 +120,7 @@ type AgentComposerWorkspacePreview = Pick<AgentWorkspaceEntity, 'type'> &
 type AgentComposerSessionSnapshot = {
   workspace?: AgentComposerWorkspacePreview | null
   workspaceId?: string | null
+  lastContextUsage?: AgentSessionContextUsageSnapshot | null
 }
 
 type Props = {
@@ -223,6 +225,7 @@ const AgentComposerRoot = ({
         agentId={agentId}
         sessionId={sessionId}
         sessionData={sessionData}
+        lastContextUsage={session.lastContextUsage}
         workspace={session?.workspace ?? null}
         workspaceId={workspaceId ?? session?.workspaceId ?? null}
         actionsRef={actionsRef}
@@ -249,6 +252,7 @@ interface InnerProps {
   agentId: string
   sessionId: string
   sessionData?: ToolContext['session']
+  lastContextUsage?: AgentSessionContextUsageSnapshot | null
   workspace?: AgentComposerWorkspacePreview | null
   workspaceId?: string | null
   actionsRef: React.MutableRefObject<ProviderActionHandlers>
@@ -488,10 +492,22 @@ const AgentComposerWorkspaceControl = ({
   return <Tooltip content={workspaceWarning}>{selector}</Tooltip>
 }
 
-function AgentComposerContextUsage({ model, sessionId }: { model?: Model; sessionId: string }) {
+function AgentComposerContextUsage({
+  model,
+  sessionId,
+  lastContextUsage
+}: {
+  model?: Model
+  sessionId: string
+  lastContextUsage?: AgentSessionContextUsageSnapshot | null
+}) {
   const { t } = useTranslation()
   const expectedModels = useMemo(() => getContextUsageModelCandidates(model), [model])
-  const { percentage, usage } = useAgentSessionContextUsage(sessionId, expectedModels)
+  const { percentage, usage, source, capturedAt } = useAgentSessionContextUsage(
+    sessionId,
+    expectedModels,
+    lastContextUsage
+  )
   const compaction = useAgentSessionCompaction(sessionId)
   if (percentage === null || !usage) return null
 
@@ -508,7 +524,14 @@ function AgentComposerContextUsage({ model, sessionId }: { model?: Model; sessio
         content: 'w-64 max-w-64 rounded-md border border-border bg-card p-3 text-card-foreground shadow-md'
       }}
       content={
-        <ContextUsageSummary usage={usage} percentage={percentage} color={ringColor} isCompacting={isCompacting} />
+        <ContextUsageSummary
+          usage={usage}
+          percentage={percentage}
+          color={ringColor}
+          isCompacting={isCompacting}
+          source={source}
+          capturedAt={capturedAt}
+        />
       }>
       <span
         aria-label={`${t('agent.right_pane.info.context_usage')} ${percentage}%`}
@@ -603,6 +626,7 @@ const AgentComposerInner = ({
   agentId,
   sessionId,
   sessionData,
+  lastContextUsage,
   workspace,
   workspaceId,
   actionsRef,
@@ -1014,7 +1038,7 @@ const AgentComposerInner = ({
   const sendAccessory = (
     <div className="flex items-center gap-1.5">
       {!placesWorkspaceInBelowControls ? renderWorkspaceControl?.({ side: 'top' }) : null}
-      <AgentComposerContextUsage model={model} sessionId={sessionId} />
+      <AgentComposerContextUsage model={model} sessionId={sessionId} lastContextUsage={lastContextUsage} />
     </div>
   )
 

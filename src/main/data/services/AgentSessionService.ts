@@ -2,7 +2,12 @@ import { randomBytes } from 'node:crypto'
 
 import { application } from '@application'
 import { agentTable as agentsTable } from '@data/db/schemas/agent'
-import { type AgentSessionRow as SessionRow, agentSessionTable as sessionsTable } from '@data/db/schemas/agentSession'
+import {
+  type AgentSessionContextUsageRow as ContextUsageRow,
+  agentSessionContextUsageTable,
+  type AgentSessionRow as SessionRow,
+  agentSessionTable as sessionsTable
+} from '@data/db/schemas/agentSession'
 import { agentSessionMessageTable } from '@data/db/schemas/agentSessionMessage'
 import { type AgentWorkspaceRow, agentWorkspaceTable } from '@data/db/schemas/agentWorkspace'
 import { defaultHandlersFor, withSqliteErrors } from '@data/db/sqliteErrors'
@@ -11,6 +16,7 @@ import { agentWorkspaceService, rowToAgentWorkspace } from '@data/services/Agent
 import { pinService } from '@data/services/PinService'
 import { nullsToUndefined, timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
+import type { AgentSessionContextUsage } from '@shared/ai/agentSessionContextUsage'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { CursorPaginationResponse } from '@shared/data/api/apiTypes'
 import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
@@ -38,6 +44,7 @@ type SessionEntitySearchItem = Extract<EntitySearchItem, { type: 'session' }>
 type JoinedSessionRow = {
   session: SessionRow
   workspace: AgentWorkspaceRow
+  contextUsage?: ContextUsageRow | null
 }
 
 function rowToSession(row: JoinedSessionRow): AgentSessionEntity {
@@ -47,6 +54,9 @@ function rowToSession(row: JoinedSessionRow): AgentSessionEntity {
     // agentId is legitimately nullable (orphans only via cascade) — preserve T | null.
     agentId: row.session.agentId,
     workspace: rowToAgentWorkspace(row.workspace),
+    // Context usage is a detail-only field: only reads that join the side table (getById) carry it.
+    // List projections leave `contextUsage` undefined and omit the field rather than ship the blob per row.
+    ...(row.contextUsage !== undefined ? { lastContextUsage: row.contextUsage?.snapshot ?? null } : {}),
     createdAt: timestampToISO(row.session.createdAt),
     updatedAt: timestampToISO(row.session.updatedAt)
   }
@@ -159,9 +169,10 @@ export class AgentSessionService {
   getById(id: string): AgentSessionEntity {
     const db = application.get('DbService').getDb()
     const [row] = db
-      .select({ session: sessionsTable, workspace: agentWorkspaceTable })
+      .select({ session: sessionsTable, workspace: agentWorkspaceTable, contextUsage: agentSessionContextUsageTable })
       .from(sessionsTable)
       .innerJoin(agentWorkspaceTable, eq(sessionsTable.workspaceId, agentWorkspaceTable.id))
+      .leftJoin(agentSessionContextUsageTable, eq(sessionsTable.id, agentSessionContextUsageTable.sessionId))
       .where(eq(sessionsTable.id, id))
       .limit(1)
       .all()
@@ -241,6 +252,31 @@ export class AgentSessionService {
   updateTx(tx: DbOrTx, id: string, patch: UpdateAgentSessionDto): SessionRow | undefined {
     const [row] = tx.update(sessionsTable).set(patch).where(eq(sessionsTable.id, id)).returning().all()
     return row
+  }
+
+  upsertContextUsageSnapshot(sessionId: string, usage: AgentSessionContextUsage): void {
+    const snapshot = {
+      usage,
+      capturedAt: new Date().toISOString()
+    }
+
+    withSqliteErrors(
+      () =>
+        application
+          .get('DbService')
+          .getDb()
+          .insert(agentSessionContextUsageTable)
+          .values({ sessionId, snapshot })
+          .onConflictDoUpdate({
+            target: agentSessionContextUsageTable.sessionId,
+            set: { snapshot }
+          })
+          .run(),
+      {
+        ...defaultHandlersFor('Session context usage', sessionId),
+        foreignKey: () => DataApiErrorFactory.notFound('Session', sessionId)
+      }
+    )
   }
 
   /**
