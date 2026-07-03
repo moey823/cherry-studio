@@ -120,6 +120,16 @@ type AgentSessionRuntimeEntry = {
    *  persisted by the provider — these do NOT create a new user row). */
   rollSteerInputs?: AgentRuntimeUserInput[]
   compacting?: boolean
+  contextUsageLatestCapturedAt?: string
+  contextUsageCaptureSequence?: number
+  contextUsageLatestCaptureSequence?: number
+  ignoreContextUsageEventsUntilNextTurn?: boolean
+}
+
+type ContextUsagePersistOptions = {
+  allowClosed?: boolean
+  cacheMode?: 'live' | 'snapshot'
+  captureSequence?: number
 }
 
 class AgentSessionRuntimeTerminalListener implements StreamListener {
@@ -494,6 +504,28 @@ export class AgentSessionRuntimeService extends BaseService {
     return this.entries.get(entry.sessionId) === entry
   }
 
+  private beginContextUsageCapture(entry: AgentSessionRuntimeEntry): { capturedAt: string; sequence: number } {
+    const sequence = (entry.contextUsageCaptureSequence ?? 0) + 1
+    const capturedAt = new Date().toISOString()
+    entry.contextUsageCaptureSequence = sequence
+    entry.contextUsageLatestCaptureSequence = sequence
+    if (!entry.contextUsageLatestCapturedAt || capturedAt > entry.contextUsageLatestCapturedAt) {
+      entry.contextUsageLatestCapturedAt = capturedAt
+    }
+    return { capturedAt, sequence }
+  }
+
+  private acceptContextUsageCapture(
+    entry: AgentSessionRuntimeEntry,
+    capturedAt: string,
+    sequence?: number
+  ): string | undefined {
+    if (sequence !== undefined && sequence < (entry.contextUsageLatestCaptureSequence ?? 0)) return undefined
+    if (entry.contextUsageLatestCapturedAt && capturedAt < entry.contextUsageLatestCapturedAt) return undefined
+    entry.contextUsageLatestCapturedAt = capturedAt
+    return capturedAt
+  }
+
   private async ensureConnection(entry: AgentSessionRuntimeEntry): Promise<boolean> {
     if (!this.isCurrentEntry(entry)) return false
     if (entry.connection) return true
@@ -599,10 +631,14 @@ export class AgentSessionRuntimeService extends BaseService {
         this.handleCompactionError(entry, event.error)
         break
       case 'context-usage':
-        this.persistContextUsage(entry, event.usage)
+        if (entry.ignoreContextUsageEventsUntilNextTurn) break
+        this.persistContextUsage(entry, event.usage, event.capturedAt ?? new Date().toISOString(), {
+          cacheMode: 'live'
+        })
         break
       case 'turn-complete':
         this.closeCurrentTurn(entry, 'success')
+        if (entry.connection?.getContextUsage) entry.ignoreContextUsageEventsUntilNextTurn = true
         this.refreshContextUsage(entry)
         break
       case 'error':
@@ -659,24 +695,49 @@ export class AgentSessionRuntimeService extends BaseService {
     })
   }
 
-  private refreshContextUsage(entry: AgentSessionRuntimeEntry, connection = entry.connection): void {
+  private refreshContextUsage(
+    entry: AgentSessionRuntimeEntry,
+    connection = entry.connection,
+    options: ContextUsagePersistOptions = {}
+  ): void {
     if (!connection?.getContextUsage) return
+    const capture = this.beginContextUsageCapture(entry)
 
     void (async () => {
       const usage = await connection.getContextUsage?.()
       if (!usage) return
-      if (!this.isCurrentEntry(entry) || entry.connection !== connection) return
-      this.persistContextUsage(entry, usage)
+      if (!options.allowClosed && (!this.isCurrentEntry(entry) || entry.connection !== connection)) return
+      this.persistContextUsage(entry, usage, capture.capturedAt, {
+        ...options,
+        captureSequence: capture.sequence
+      })
     })().catch((error) => {
       logger.warn('Failed to refresh agent session context usage', { sessionId: entry.sessionId, error })
     })
   }
 
-  private persistContextUsage(entry: AgentSessionRuntimeEntry, usage: AgentSessionContextUsage): void {
-    if (!this.isCurrentEntry(entry)) return
-    application.get('CacheService').setShared(AGENT_SESSION_CONTEXT_USAGE_CACHE_KEY(entry.sessionId), usage)
+  private persistContextUsage(
+    entry: AgentSessionRuntimeEntry,
+    usage: AgentSessionContextUsage,
+    capturedAt: string,
+    options: ContextUsagePersistOptions = {}
+  ): void {
+    const currentEntry = this.entries.get(entry.sessionId)
+    const isCurrent = currentEntry === entry
+    if (!isCurrent && !options.allowClosed) return
+    if (currentEntry && !isCurrent) return
+    const acceptedCapturedAt = this.acceptContextUsageCapture(entry, capturedAt, options.captureSequence)
+    if (!acceptedCapturedAt) return
+
+    const snapshot = { usage, capturedAt: acceptedCapturedAt }
+    if (options.cacheMode === 'snapshot') {
+      if (!currentEntry)
+        application.get('CacheService').setShared(AGENT_SESSION_CONTEXT_USAGE_CACHE_KEY(entry.sessionId), snapshot)
+    } else if (isCurrent) {
+      application.get('CacheService').setShared(AGENT_SESSION_CONTEXT_USAGE_CACHE_KEY(entry.sessionId), usage)
+    }
     try {
-      agentSessionService.upsertContextUsageSnapshot(entry.sessionId, usage)
+      agentSessionService.upsertContextUsageSnapshot(entry.sessionId, usage, acceptedCapturedAt)
     } catch (error) {
       logger.warn('Failed to persist agent session context usage snapshot', { sessionId: entry.sessionId, error })
     }
@@ -709,6 +770,7 @@ export class AgentSessionRuntimeService extends BaseService {
     if (turn.admitted) return
     turn.admitted = true
     entry.status = 'active'
+    entry.ignoreContextUsageEventsUntilNextTurn = false
     // `Set.delete` returns whether it was queued as a steer — consume the flag as we admit the turn.
     const systemReminder = entry.steerMessageIds?.delete(turn.userMessage.id) ?? false
     await entry.connection?.send({ message: turn.userMessage, systemReminder })
@@ -1030,6 +1092,7 @@ export class AgentSessionRuntimeService extends BaseService {
     }
     entry.compacting = false
 
+    this.refreshContextUsage(entry, entry.connection, { allowClosed: true, cacheMode: 'snapshot' })
     const connection = this.closeConnection(entry)
     entry.currentTurn = undefined
     entry.startingNextTurn = false
