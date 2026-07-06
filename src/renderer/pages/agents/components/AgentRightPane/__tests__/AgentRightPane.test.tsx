@@ -4,6 +4,15 @@ import type { ButtonHTMLAttributes, CSSProperties, PropsWithChildren, ReactEleme
 import { cloneElement, isValidElement, useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const mockUseAgentSessionContextUsage = vi.hoisted(() => {
+  type UseAgentSessionContextUsageMock = (
+    sessionId: string | undefined,
+    expectedModels?: readonly (string | null | undefined)[],
+    fallbackSnapshot?: unknown
+  ) => { percentage: null; usage: null; source: 'none' }
+  return vi.fn<UseAgentSessionContextUsageMock>(() => ({ percentage: null, usage: null, source: 'none' }))
+})
+
 vi.mock('@cherrystudio/ui', () => ({
   Badge: ({ children }: PropsWithChildren) => <span>{children}</span>,
   Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode }) => (
@@ -118,7 +127,7 @@ vi.mock('@renderer/hooks/agent/useAgentSessionCompaction', () => ({
 }))
 
 vi.mock('@renderer/hooks/agent/useAgentSessionContextUsage', () => ({
-  useAgentSessionContextUsage: () => ({ percentage: null, usage: null })
+  useAgentSessionContextUsage: mockUseAgentSessionContextUsage
 }))
 
 vi.mock('@renderer/hooks/command', () => ({
@@ -211,5 +220,35 @@ describe('AgentRightPane', () => {
     expect(screen.queryByRole('button', { name: 'agent.session.list.title' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'agent.right_pane.tabs.files' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'agent.right_pane.tabs.status' })).toBeNull()
+  })
+
+  it('passes current model candidates to right-pane context usage consumers', () => {
+    render(
+      <AgentRightPane
+        sessionId="session-a"
+        modelFallback={{
+          id: 'anthropic::claude-sonnet-4-5',
+          name: 'Claude Sonnet 4.5',
+          provider: 'anthropic'
+        }}
+        workspacePath="/workspace"
+        messages={[]}
+        partsByMessageId={{}}>
+        <AgentRightPane.Shortcuts />
+        <AgentRightPane.Host />
+      </AgentRightPane>
+    )
+
+    const statusShortcut = document.querySelector('[data-shell-tab-shortcut="status"]')
+    fireEvent.click(statusShortcut as HTMLElement)
+
+    const matchingCalls = mockUseAgentSessionContextUsage.mock.calls.filter(
+      ([sessionId, expectedModels]) =>
+        sessionId === 'session-a' &&
+        Array.isArray(expectedModels) &&
+        expectedModels.includes('anthropic::claude-sonnet-4-5') &&
+        expectedModels.includes('claude-sonnet-4-5')
+    )
+    expect(matchingCalls.length).toBeGreaterThanOrEqual(2)
   })
 })

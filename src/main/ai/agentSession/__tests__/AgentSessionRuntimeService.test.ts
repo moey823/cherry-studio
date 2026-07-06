@@ -888,7 +888,7 @@ describe('AgentSessionRuntimeService', () => {
     expect(mocks.cacheSetShared).not.toHaveBeenCalledWith('agent.session.context_usage.session-1', olderUsage)
   })
 
-  it('keeps accepting driver context usage after turn-complete when host final refresh returns null', () => {
+  it('keeps accepting driver context usage after turn-complete when host final refresh returns null', async () => {
     const usage = {
       categories: [],
       totalTokens: 24,
@@ -907,8 +907,14 @@ describe('AgentSessionRuntimeService', () => {
     service.beginTurn(baseTurnInput)
     const entry = getEntry(service)
     const dateNow = vi.spyOn(Date, 'now').mockReturnValue(2)
+    const hostRefresh = createDeferred<typeof usage | null>()
+    const hostRefreshCompleted = vi.fn()
     entry.connection = {
-      getContextUsage: vi.fn().mockResolvedValue(null),
+      getContextUsage: vi.fn(async () => {
+        const refreshedUsage = await hostRefresh.promise
+        hostRefreshCompleted(refreshedUsage)
+        return refreshedUsage
+      }),
       send: vi.fn(),
       close: vi.fn(),
       events: []
@@ -916,8 +922,12 @@ describe('AgentSessionRuntimeService', () => {
 
     try {
       ;(service as any).handleRuntimeEvent(entry, { type: 'turn-complete' })
+      await vi.waitFor(() => expect(entry.connection?.getContextUsage).toHaveBeenCalledOnce())
       mocks.upsertContextUsageSnapshot.mockClear()
       mocks.cacheSetShared.mockClear()
+      hostRefresh.resolve(null)
+      await vi.waitFor(() => expect(hostRefreshCompleted).toHaveBeenCalledWith(null))
+
       ;(service as any).handleRuntimeEvent(entry, {
         type: 'context-usage',
         usage,

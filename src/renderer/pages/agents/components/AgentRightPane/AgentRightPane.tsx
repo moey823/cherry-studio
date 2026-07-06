@@ -43,6 +43,7 @@ import { resolveInlineFilePath } from '@renderer/utils/filePath'
 import { cn } from '@renderer/utils/style'
 import type { AgentSessionContextUsageSnapshot } from '@shared/ai/agentSessionContextUsage'
 import type { CherryMessagePart, CherryUIMessage, ModelSnapshot } from '@shared/data/types/message'
+import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import {
   Activity,
   Bot,
@@ -180,6 +181,17 @@ function useAgentRightPane(): AgentRightPaneContextValue {
   const value = use(AgentRightPaneContext)
   if (!value) throw new Error('useAgentRightPane must be used within <AgentRightPane>')
   return value
+}
+
+function getContextUsageModelCandidates(model: ModelSnapshot | undefined): string[] | undefined {
+  if (!model) return undefined
+  const modelId = isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id
+  return [model.id, modelId].filter((value, index, values) => value && values.indexOf(value) === index)
+}
+
+function useAgentRightPaneContextUsage(meta: AgentRightPaneMeta) {
+  const expectedModels = useMemo(() => getContextUsageModelCandidates(meta.modelFallback), [meta.modelFallback])
+  return useAgentSessionContextUsage(meta.sessionId, expectedModels, meta.lastContextUsage)
 }
 
 // The workspace file-tree model lives in its own context so its frequent
@@ -560,11 +572,7 @@ function AgentAgentRightPaneStatusPanel() {
   const { state, meta } = useAgentRightPane()
   const { t } = useTranslation()
   const { status } = state
-  const { usage, percentage, source, capturedAt } = useAgentSessionContextUsage(
-    meta.sessionId,
-    undefined,
-    meta.lastContextUsage
-  )
+  const { usage, percentage, source, capturedAt } = useAgentRightPaneContextUsage(meta)
   const compaction = useAgentSessionCompaction(meta.sessionId)
   const isCompacting = compaction.status === 'compacting'
   const contextUsageColor = percentage === null ? undefined : getAgentContextUsageColor(percentage)
@@ -870,11 +878,7 @@ function AgentRightPaneHighlights({
 // Reads the same persisted usage data the Status tab renders.
 function AgentRightPaneStatusPreview() {
   const { meta } = useAgentRightPane()
-  const { usage, percentage, source, capturedAt } = useAgentSessionContextUsage(
-    meta.sessionId,
-    undefined,
-    meta.lastContextUsage
-  )
+  const { usage, percentage, source, capturedAt } = useAgentRightPaneContextUsage(meta)
   const compaction = useAgentSessionCompaction(meta.sessionId)
   const isCompacting = compaction.status === 'compacting'
   const contextUsageColor = percentage === null ? undefined : getAgentContextUsageColor(percentage)
