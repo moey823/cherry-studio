@@ -17,8 +17,7 @@ import { pinService } from '@data/services/PinService'
 import { nullsToUndefined, timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
 import type { AgentSessionContextUsage, AgentSessionContextUsageSnapshot } from '@shared/ai/agentSessionContextUsage'
-import { DataApiErrorFactory } from '@shared/data/api'
-import type { CursorPaginationResponse } from '@shared/data/api/apiTypes'
+import { DataApiErrorFactory } from '@shared/data/api/errors'
 import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
 import type {
   AgentSessionEntity,
@@ -29,6 +28,7 @@ import type {
 } from '@shared/data/api/schemas/agentSessions'
 import { AGENT_WORKSPACE_TYPE, type AgentSessionWorkspaceSource } from '@shared/data/api/schemas/agentWorkspaces'
 import type { EntitySearchItem } from '@shared/data/api/schemas/search'
+import type { CursorPaginationResponse } from '@shared/data/api/types'
 import { and, asc, desc, eq, gte, inArray, isNull, or, type SQL, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 

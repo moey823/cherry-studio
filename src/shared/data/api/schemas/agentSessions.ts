@@ -13,7 +13,7 @@ import {
 import { TraceIdSchema } from '@shared/data/types/trace'
 import * as z from 'zod'
 
-import type { CursorPaginationResponse } from '../apiTypes'
+import type { CursorPaginationResponse } from '../types'
 import type { OrderEndpoints } from './_endpointHelpers'
 import {
   type AgentSessionWorkspaceSource,
