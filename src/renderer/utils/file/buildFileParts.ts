@@ -27,7 +27,11 @@ import { createFilePathHandle } from '@shared/utils/file'
 export async function buildFilePartsForAttachments(attachments: ComposerAttachment[]): Promise<FileUIPart[]> {
   return Promise.all(
     attachments.map(async (attachment) => {
-      const entry = await window.api.file.createInternalEntry({ source: 'path', path: attachment.path as FilePath })
+      const entry = await window.api.file.createInternalEntry({
+        source: 'path',
+        path: attachment.path as FilePath,
+        cleanupPolicy: 'delete_when_unreferenced'
+      })
       const physicalPath = await window.api.file.getPhysicalPath({ id: entry.id })
       const metadata = await window.api.file.getMetadata(createFilePathHandle(physicalPath))
       const basePart: FileUIPart = {
