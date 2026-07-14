@@ -106,7 +106,7 @@ export function PromptEditorField({
           aria-invalid={hasError || undefined}
           onMouseDown={handleEditorAreaMouseDown}
           className={`overflow-hidden rounded-md border bg-accent/15 transition-all focus-within:bg-accent/20 ${
-            fill ? 'flex min-h-0 flex-1 flex-col ' : ''
+            fill ? 'flex min-h-0 flex-1 flex-col' : ''
           }${
             hasError
               ? 'border-destructive/50 focus-within:border-destructive/60'
@@ -114,7 +114,7 @@ export function PromptEditorField({
           }`}>
           {effectiveShowPreview ? (
             <div
-              className={`markdown overflow-auto p-3 text-foreground text-xs${fill ? ' min-h-0 flex-1' : ''}`}
+              className={`markdown overflow-auto p-3 text-foreground text-xs${fill ? 'min-h-0 flex-1' : ''}`}
               style={fill ? undefined : { minHeight, maxHeight }}
               onDoubleClick={() => setShowPreview(false)}>
               <Markdown id={previewId}>{previewValue || value}</Markdown>
