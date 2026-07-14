@@ -396,7 +396,8 @@ describe('TabsProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close B and C' }))
 
     await waitFor(() => expect(screen.getByTestId('tab-ids')).toHaveTextContent('files,home,d'))
-    expect(screen.getByTestId('active-tab-id')).toHaveTextContent('home')
+    // Chrome-style: the surviving right neighbor takes over the active slot.
+    expect(screen.getByTestId('active-tab-id')).toHaveTextContent('d')
   })
 
   it('opens launchpad when closing the only tab', async () => {

@@ -269,7 +269,9 @@ export function TabsProvider({
         const activeIndex = tabs.findIndex((tab) => tab.id === activeTabId)
         const leftTab = [...tabs.slice(0, activeIndex)].reverse().find((tab) => !closingIdSet.has(tab.id))
         const rightTab = tabs.slice(activeIndex + 1).find((tab) => !closingIdSet.has(tab.id))
-        newActiveId = (leftTab ?? rightTab)?.id ?? ''
+        // Chrome-style: activate the right neighbor (the tab that slides into the
+        // closed tab's place); fall back to the left one at the end of the strip.
+        newActiveId = (rightTab ?? leftTab)?.id ?? ''
       }
 
       const pinnedIds = new Set(closingTabs.filter(storesPinned).map((tab) => tab.id))
