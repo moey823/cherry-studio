@@ -2655,8 +2655,6 @@
       "filter": {
         "selectAgent": "Selectează un agent",
         "selectAssistant": "Selectează un asistent",
-        "statusLabel": "Stare",
-        "statusPlaceholder": "Selectează starea",
         "unlinkedAssistant": "Asistent deconectat"
       },
       "loading": {
@@ -2668,11 +2666,6 @@
       "searchSession": "Căutare sarcini...",
       "searchTopic": "Caută conversații...",
       "shortTitle": "Istorie",
-      "status": {
-        "completed": "Finalizat",
-        "failed": "Eșuat",
-        "running": "Alergare"
-      },
       "table": {
         "actions": "Acțiuni",
         "conversation": "Conversație",
