@@ -338,7 +338,7 @@ describe('AppShellTabBar', () => {
     expect(title).not.toHaveClass('font-medium')
     expect(title).not.toHaveClass('truncate')
     expect(title.getAttribute('style')).toContain(`mask-image: ${fadeMask}`)
-    expect(tabButton).toHaveClass('pl-2', 'pr-1.5')
+    expect(tabButton).toHaveClass('px-2')
     expect(tabButton).not.toHaveClass('pr-1')
     expect(icon).toHaveAttribute('width', '14')
     expect(icon).toHaveAttribute('height', '14')
@@ -396,7 +396,7 @@ describe('AppShellTabBar', () => {
     expect(screen.queryAllByTestId('menu-tab.close')).toHaveLength(1)
   })
 
-  it('allows the last normal tab to close while forbidding direct close on pinned tabs', () => {
+  it('allows the last normal tab and pinned tabs to close from the menu', () => {
     const tabs: Tab[] = [
       { id: 'home', type: 'route', url: '/app/chat', title: 'Chat' },
       { id: 'p', type: 'route', url: '/app/p', title: 'P', isPinned: true }
@@ -416,7 +416,7 @@ describe('AppShellTabBar', () => {
     )
 
     expect(screen.queryAllByTestId('menu-tab.pin')).toHaveLength(2)
-    expect(screen.queryAllByTestId('menu-tab.close')).toHaveLength(1)
+    expect(screen.queryAllByTestId('menu-tab.close')).toHaveLength(2)
     expect(screen.queryAllByTestId('menu-tab.move-to-first')).toHaveLength(0)
   })
 
@@ -440,7 +440,7 @@ describe('AppShellTabBar', () => {
       />
     )
 
-    expect(screen.queryAllByTestId('menu-tab.close')).toHaveLength(2)
+    expect(screen.queryAllByTestId('menu-tab.close')).toHaveLength(3)
   })
   it('closes a normal tab on double click or middle click', () => {
     const handleDoubleClick = vi.fn()
@@ -557,13 +557,13 @@ describe('getTabCapabilities', () => {
     })
   })
 
-  it('lets pinned tabs unpin but never close, reordering only with siblings', () => {
+  it('lets pinned tabs unpin and close, reordering only with siblings', () => {
     expect(getTabCapabilities({ id: 'p', isPinned: true }, ctx({ pinnedCount: 1 }))).toEqual({
       menu: true,
       reorder: false,
       togglePin: true,
       detach: true,
-      close: false
+      close: true
     })
     expect(getTabCapabilities({ id: 'p', isPinned: true }, ctx({ pinnedCount: 2 })).reorder).toBe(true)
   })
