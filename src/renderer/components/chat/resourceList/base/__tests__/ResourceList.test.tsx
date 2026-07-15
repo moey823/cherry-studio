@@ -1403,6 +1403,7 @@ describe('ResourceList', () => {
     expect(sessionLabel!).not.toHaveClass('flex-1')
     expect(sessionChevronSlot).toHaveClass(
       'hidden',
+      '-ml-1.5',
       'size-6',
       'items-center',
       'justify-center',
