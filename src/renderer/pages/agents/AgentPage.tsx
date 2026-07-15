@@ -174,8 +174,7 @@ const AgentPage = () => {
   const { stats: sessionStats, loadLatestSession, loadSessionSeedCandidates } = agentSessionsSource
   // First-entry selection resumes the most-recently-updated session. A dedicated `updatedAt DESC LIMIT 1`
   // query proves the global latest, so it neither waits for the full session history to paginate in nor
-  // depends on the `orderKey`-paged `/agent-sessions` list order (which holds the newest-created, not the
-  // most-recently-active, sessions on its first page).
+  // depends on either independently paged `/agent-sessions` stream or its visible ordering.
   const { latestSession, isLoading: isLatestSessionLoading } = useLatestSession({ enabled: !isMessageOnlyView })
   const isLatestSessionReady = isMessageOnlyView || !isLatestSessionLoading
   const isWindowFrame = useWindowFrame().mode === 'window'
@@ -187,6 +186,8 @@ const AgentPage = () => {
   const { agents, isLoading: isAgentsLoading } = useAgents()
   const routeActiveSessionId = isMessageOnlyView ? null : (routeSessionId ?? tabMetadataSessionId ?? null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(() => routeActiveSessionId)
+  const [classicAgentScopeId, setClassicAgentScopeId] = useState<string | undefined>(undefined)
+  const [isSelectedAgentScopeEmpty, setIsSelectedAgentScopeEmpty] = useState(false)
   const syncedRouteActiveSessionIdRef = useRef(routeActiveSessionId)
   // Classic-layout (rail) session-pane open state, cached on the agent surface's own key so it
   // survives app/page re-entry without bleeding into the assistant surface.
@@ -196,6 +197,7 @@ const AgentPage = () => {
   useEffect(() => {
     const previousRouteActiveSessionId = syncedRouteActiveSessionIdRef.current
     syncedRouteActiveSessionIdRef.current = routeActiveSessionId
+    if (routeActiveSessionId) setIsSelectedAgentScopeEmpty(false)
 
     // A pending session left over from the previous route no longer matches the new active id, so
     // `useActiveSession` ignores it — no need to null it here.
@@ -215,7 +217,7 @@ const AgentPage = () => {
   const [lastUsedAgentId, setLastUsedAgentId] = usePersistCache('ui.agent.last_used_agent_id')
   const [lastUsedWorkspaceId, setLastUsedWorkspaceId] = usePersistCache('ui.agent.last_used_workspace_id')
   const [, setRecentItems] = usePersistCache('ui.global_search.recent_items')
-  const [, setSessionExpansionAgent] = usePersistCache('ui.agent.session.expansion.agent')
+  const [sessionExpansionAgent, setSessionExpansionAgent] = usePersistCache('ui.agent.session.expansion.agent')
   const lastRecordedRecentSessionRef = useRef<string | undefined>(undefined)
   const [sessionRevealRequest, setSessionRevealRequest] = useState<ResourceListRevealRequest>()
   const [pendingLocateMessageId, setPendingLocateMessageId] = useState<string | undefined>()
@@ -244,7 +246,20 @@ const AgentPage = () => {
   const lastVisibleSessionRef = useRef<AgentSessionEntity | null>(null)
   const visibleSession = isMessageOnlyView
     ? routeSession
-    : (activeSession ?? (isActiveSessionLoading ? lastVisibleSessionRef.current : null))
+    : isSelectedAgentScopeEmpty
+      ? null
+      : (activeSession ?? (isActiveSessionLoading ? lastVisibleSessionRef.current : null))
+  const visibleSessionId = visibleSession?.id
+  const visibleSessionAgentId = visibleSession?.agentId
+  useEffect(() => {
+    if (!visibleSessionId || !visibleSessionAgentId) return
+    setClassicAgentScopeId(visibleSessionAgentId)
+    setIsSelectedAgentScopeEmpty(false)
+  }, [visibleSessionAgentId, visibleSessionId])
+  const activeResourceAgentId =
+    isClassicSessionLayout && panePosition === 'right' && classicAgentScopeId !== undefined
+      ? classicAgentScopeId
+      : (visibleSession?.agentId ?? null)
   const resourceConversationKey = useMemo(() => {
     if (visibleSession?.id) return `session:${visibleSession.id}`
     if (missingAgentSelection) return 'missing-agent-selection'
@@ -321,9 +336,9 @@ const AgentPage = () => {
   }, [currentTabId])
   // Label this tab with its agent emoji + session name so multiple agent tabs
   // are distinguishable (every tab labels itself — not gated on active).
-  const { agent: visibleAgent } = useAgent(visibleSession?.agentId ?? null)
+  const { agent: visibleAgent } = useAgent(activeResourceAgentId)
   const tabInstanceSessionId = !isMessageOnlyView
-    ? (visibleSession?.id ?? routeActiveSessionId ?? undefined)
+    ? (visibleSession?.id ?? (!isSelectedAgentScopeEmpty ? (routeActiveSessionId ?? undefined) : undefined))
     : undefined
   useTabSelfMetadata({
     title: visibleSession?.name?.trim() || visibleAgent?.name?.trim() || getDefaultRouteTitle('/app/agents'),
@@ -448,6 +463,8 @@ const AgentPage = () => {
       setMissingAgentSelection(false)
       const agentId = session.agentId ?? fallbackAgentId
       if (agentId) {
+        setClassicAgentScopeId(agentId)
+        setIsSelectedAgentScopeEmpty(false)
         rememberLastUsedSession(agentId, isUserWorkspaceSession(session) ? session.workspaceId : undefined)
       }
       setActiveSession(session)
@@ -486,11 +503,7 @@ const AgentPage = () => {
         }
 
         const workspaceSource = await resolveCreateWorkspaceSource(defaults, visibleSession)
-        // Drop the session being replaced (post-delete): a stale candidate list still holds it, and
-        // reusing it would reactivate the just-deleted session instead of opening a fresh one.
-        const reuseCandidates = (await getSessionReuseCandidates(agentId)).filter(
-          (candidate) => candidate.id !== defaults.excludeReuseSessionId
-        )
+        const reuseCandidates = await getSessionReuseCandidates(agentId)
         const reusableSessions = await findReusableEmptySessions(
           reuseCandidates,
           (candidate) => candidate.agentId === agentId && sessionMatchesWorkspaceSource(candidate, workspaceSource)
@@ -536,6 +549,8 @@ const AgentPage = () => {
   const showMissingAgentSelection = useCallback(() => {
     closeSurface()
     setPendingLocateMessageId(undefined)
+    setClassicAgentScopeId(undefined)
+    setIsSelectedAgentScopeEmpty(false)
     clearActiveSession()
     setMissingAgentSelection(true)
   }, [clearActiveSession, closeSurface])
@@ -654,6 +669,7 @@ const AgentPage = () => {
         return
       }
 
+      setIsSelectedAgentScopeEmpty(false)
       selectSession(sessionId)
       sessionRevealRequestIdRef.current += 1
       setSessionRevealRequest({
@@ -761,23 +777,49 @@ const AgentPage = () => {
   const setActiveSessionAndClearTransient = useCallback(
     (sessionId: string | null, session?: AgentSessionEntity | null) => {
       closeSurface()
-      if (sessionId) setMissingAgentSelection(false)
+      if (sessionId) {
+        if (session?.agentId) setClassicAgentScopeId(session.agentId)
+        setIsSelectedAgentScopeEmpty(false)
+        setMissingAgentSelection(false)
+      } else if (classicAgentScopeId !== undefined) {
+        setIsSelectedAgentScopeEmpty(true)
+      }
       selectSession(sessionId, session)
     },
-    [closeSurface, selectSession]
+    [classicAgentScopeId, closeSurface, selectSession]
   )
   const handleResourceSessionSelect = useCallback(
     (sessionId: string, session: AgentSessionEntity) => {
-      closeSurface()
       setActiveSessionAndClearTransient(sessionId, session)
+      sessionRevealRequestIdRef.current += 1
+      setSessionRevealRequest({
+        clearFilters: true,
+        clearQuery: true,
+        itemId: sessionId,
+        requestId: sessionRevealRequestIdRef.current
+      })
     },
-    [closeSurface, setActiveSessionAndClearTransient]
+    [setActiveSessionAndClearTransient]
+  )
+  const handleEmptyAgentSelect = useCallback(
+    (agentId: string) => {
+      closeSurface()
+      setClassicAgentScopeId(agentId)
+      setIsSelectedAgentScopeEmpty(true)
+      setMissingAgentSelection(false)
+      setPendingLocateMessageId(undefined)
+      setSessionRevealRequest(undefined)
+      selectSession(null, null)
+    },
+    [closeSurface, selectSession]
   )
   // After deleting the active agent, select the latest remaining session, or create
   // a real empty session for another agent. Filter by the deleted id so this is
   // correct even before the session cache refetches.
   const handleActiveAgentDeleted = useCallback(
     async (deletedAgentId: string) => {
+      setClassicAgentScopeId(undefined)
+      setIsSelectedAgentScopeEmpty(false)
       const nextSession = await loadLatestSession()
       if (nextSession) {
         setActiveSessionAndClearTransient(nextSession.id, nextSession)
@@ -786,6 +828,7 @@ const AgentPage = () => {
       const created = await createDefaultEmptySession({ excludedAgentIds: [deletedAgentId] })
       // Creation failed → don't leave the view on a session that belonged to the deleted agent.
       if (!created) {
+        setIsSelectedAgentScopeEmpty(true)
         setActiveSessionId(null)
       }
     },
@@ -826,7 +869,6 @@ const AgentPage = () => {
   }, [])
 
   // Classic layout = entity rail + right session panel; modern layout = the single sidebar (AgentSidePanel).
-  const activeResourceAgentId = visibleSession?.agentId ?? null
   const sessionListPosition: TopicTabPosition =
     !isWindowFrame && isClassicSessionLayout && panePosition === 'right' ? 'right' : 'left'
   const sessionCountByAgentId = useMemo(
@@ -846,7 +888,7 @@ const AgentPage = () => {
   const setSessionListPosition = useCallback(
     async (position: TopicTabPosition) => {
       await setSessionDisplayMode('agent')
-      if (position === 'left') {
+      if (position === 'left' && sessionExpansionAgent == null) {
         const activeAgentId = visibleSession?.agentId
         const collapsedAgentGroupIds = Array.from(
           new Set(
@@ -868,6 +910,7 @@ const AgentPage = () => {
       setSessionDisplayMode,
       setSessionExpansionAgent,
       setSessionPaneOpen,
+      sessionExpansionAgent,
       sessionStats?.byAgent,
       visibleSession?.agentId
     ]
@@ -884,6 +927,7 @@ const AgentPage = () => {
         historyRecordsActive={historyRecordsActive}
         onOpenHistoryRecords={isWindowFrame ? undefined : openHistoryRecords}
         onSelectSession={handleResourceSessionSelect}
+        onSelectEmptyAgent={handleEmptyAgentSelect}
         onSelectedAgentClick={() => {
           closeSurface()
           setSessionPaneOpen(!sessionPaneOpen)
@@ -895,6 +939,7 @@ const AgentPage = () => {
       />
     ) : (
       <AgentSidePanel
+        activeSession={visibleSession}
         activeSessionId={activeSessionId}
         agentSessionsSource={agentSessionsSource}
         onActiveAgentDeleted={handleActiveAgentDeleted}
@@ -920,6 +965,7 @@ const AgentPage = () => {
           label: t('agent.session.list.title'),
           node: (
             <Sessions
+              activeSession={visibleSession}
               agentSessionsSource={agentSessionsSource}
               presentation="right-panel"
               activeSessionId={activeSessionId}
