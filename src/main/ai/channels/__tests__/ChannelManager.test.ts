@@ -1,4 +1,5 @@
 import { agentChannelService as channelService } from '@data/services/AgentChannelService'
+import { BaseService } from '@main/core/lifecycle'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ChannelAdapter, type ChannelAdapterConfig } from '../ChannelAdapter'
@@ -89,6 +90,17 @@ describe('ChannelManager', () => {
       updatedAt: Date.now(),
       ...overrides
     }) as any
+
+  it('does not connect persistent channels during lifecycle startup', async () => {
+    BaseService.resetInstances()
+    const privacyManager = new ChannelManager()
+
+    await privacyManager._doInit()
+
+    expect(channelService.listChannels).not.toHaveBeenCalled()
+    expect(createdAdapters).toHaveLength(0)
+    await privacyManager._doStop()
+  })
 
   it('start() with no channels does not error', async () => {
     vi.mocked(channelService.listChannels).mockReturnValueOnce([])

@@ -122,8 +122,7 @@ describe('HtmlFilePreview', () => {
     await screen.findByTestId('html-frame')
 
     const props = mocks.htmlFrame.mock.calls.at(-1)?.[0]
-    // The main window runs with webSecurity:false, so an opaque-origin iframe can still reach
-    // parent.api; the only robust guard is running no scripts at all, backed by a strict CSP.
+    // Keep a script-less iframe and an explicit CSP in addition to Electron's webSecurity boundary.
     expect(props?.sandbox).toBe('')
     expect(props?.sandbox).not.toContain('allow-scripts')
     expect(props?.sandbox).not.toContain('allow-same-origin')

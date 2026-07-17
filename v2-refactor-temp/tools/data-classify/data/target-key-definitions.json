@@ -6,6 +6,13 @@
   },
   "definitions": [
     {
+      "targetKey": "app.dist.auto_update.enabled",
+      "type": "boolean",
+      "defaultValue": false,
+      "status": "classified",
+      "description": "Privacy default: updates are checked only when the user requests a check"
+    },
+    {
       "targetKey": "app.power.prevent_sleep_when_busy",
       "type": "boolean",
       "defaultValue": false,

@@ -1,9 +1,8 @@
 import { application } from '@application'
 import { optimizer } from '@electron-toolkit/utils'
 import { loggerService } from '@logger'
-import { installDevtoolsExtensions } from '@main/core/devtools'
 import { BaseService, Emitter, type Event, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
-import { isDev, isLinux, isMac, isWin } from '@main/core/platform'
+import { isLinux, isMac, isWin } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
 import { getWindowsBackgroundMaterial, replaceDevtoolsFont } from '@main/utils/windowUtil'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -11,7 +10,7 @@ import type { MainWindowInitData } from '@shared/types/mainWindow'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/utils/window'
 import type { BrowserWindow } from 'electron'
 import { app, nativeImage, nativeTheme, shell } from 'electron'
-import path, { join } from 'path'
+import path from 'path'
 
 import iconPath from '../../../build/icon.png?asset'
 import { isSafeExternalUrl } from '../utils/externalUrlSafety'
@@ -94,11 +93,6 @@ export class MainWindowService extends BaseService {
     if (isLaunchToTray) {
       application.get('WindowManager').behavior.setMacShowInDockByType(WindowType.Main, false)
     }
-
-    // Dev-only: load DevTools extensions before the main window's page loads so
-    // they attach to it. Fire-and-forget — a slow/failed install (React DevTools
-    // may download on first run) must never delay window creation. No-op in prod.
-    void installDevtoolsExtensions()
 
     this.openMainWindow()
   }
@@ -254,12 +248,16 @@ export class MainWindowService extends BaseService {
       contextMenu.contextMenu(webContents)
     })
 
-    // Dangerous API
-    if (isDev) {
-      mainWindow.webContents.on('will-attach-webview', (_, webPreferences) => {
-        webPreferences.preload = join(__dirname, '../preload/preload.js')
-      })
-    }
+    // Never grant embedded remote pages the application's privileged preload.
+    // Mini-app webviews remain isolated browser content even in development.
+    mainWindow.webContents.on('will-attach-webview', (_, webPreferences) => {
+      delete webPreferences.preload
+      webPreferences.nodeIntegration = false
+      webPreferences.contextIsolation = true
+      webPreferences.sandbox = true
+      webPreferences.webSecurity = true
+      webPreferences.allowRunningInsecureContent = false
+    })
   }
 
   private setupWindowEvents(mainWindow: BrowserWindow) {
@@ -365,26 +363,6 @@ export class MainWindowService extends BaseService {
       }
 
       return { action: 'deny' }
-    })
-
-    this.setupWebRequestHeaders(mainWindow)
-  }
-
-  private setupWebRequestHeaders(mainWindow: BrowserWindow) {
-    mainWindow.webContents.session.webRequest.onHeadersReceived({ urls: ['*://*/*'] }, (details, callback) => {
-      if (details.responseHeaders?.['X-Frame-Options']) {
-        delete details.responseHeaders['X-Frame-Options']
-      }
-      if (details.responseHeaders?.['x-frame-options']) {
-        delete details.responseHeaders['x-frame-options']
-      }
-      if (details.responseHeaders?.['Content-Security-Policy']) {
-        delete details.responseHeaders['Content-Security-Policy']
-      }
-      if (details.responseHeaders?.['content-security-policy']) {
-        delete details.responseHeaders['content-security-policy']
-      }
-      callback({ cancel: false, responseHeaders: details.responseHeaders })
     })
   }
 

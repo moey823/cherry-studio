@@ -14,7 +14,7 @@ But some setup must happen even earlier — synchronously, with no lifecycle
 services available — because `application.bootstrap()` itself depends on it.
 Most importantly: `application.initPathRegistry()` is called from preboot
 in `main/main.ts` after userData resolution, the single-instance lock,
-Chromium flag setup, and crash telemetry setup. It calls
+Chromium flag setup, and local process-error logging setup. It calls
 `buildPathRegistry()` to build a frozen snapshot of the path registry by
 reading `app.getPath('userData')` and other Electron paths. So all
 `app.setPath('userData', …)` calls must complete **before**
@@ -121,10 +121,9 @@ preboot/
 ├── chromiumFlags.ts     Chromium startup flags (command-line switches and
 │                        hardware-acceleration toggles) that must run
 │                        before app.whenReady()
-├── crashTelemetry.ts    crashReporter + process-level error hooks +
-│                        webContents hardening (Document-Policy response
-│                        header and unresponsive renderer call-stack
-│                        collection)
+├── crashTelemetry.ts    local process-level error hooks only; crash
+│                        reporting, renderer call-stack collection, and
+│                        report uploads are disabled in the privacy build
 ├── backupRestoreGate.ts
 │                        backup-restore gate; promotes a staged restored DB
 │                        (if any) at the top of startApp(), after the

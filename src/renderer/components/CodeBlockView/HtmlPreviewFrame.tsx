@@ -2,27 +2,29 @@
 import { memo, type Ref } from 'react'
 
 export const HTML_PREVIEW_DEFAULT_BASE_URL = 'about:srcdoc'
-// `allow-same-origin` is required so the parent can read the iframe's `contentDocument`
-// for HTML-artifact screenshot capture (save / copy PNG). Without it the sandbox is an
-// opaque origin, `contentDocument` is null, and capture silently no-ops.
+// Generated HTML may execute its own inline scripts, but it receives an opaque
+// origin and no form/navigation permission. Keeping `allow-same-origin` out is
+// essential because the parent renderer exposes privileged application APIs.
+export const HTML_PREVIEW_IFRAME_SANDBOX = 'allow-scripts'
 
-export const HTML_PREVIEW_IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms'
+// Generated artifacts are offline by default. Inline CSS/JS and data/blob
+// assets work, while fetch/XHR, remote images, frames, forms and navigation are
+// blocked. This prevents model-generated HTML from silently exfiltrating data.
+export const HTML_PREVIEW_DEFAULT_CSP =
+  "default-src 'none'; script-src 'unsafe-inline' data: blob:; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'"
 
 // Fully-restricted sandbox for previewing untrusted on-disk files. An empty `sandbox`
 // applies every restriction — no scripts, no forms, opaque origin — while still rendering
-// static HTML/CSS. Running NO scripts is the deliberate choice: the main window sets
-// `webSecurity: false` (windowRegistry.ts), which disables the same-origin policy, so
-// merely dropping `allow-same-origin` is NOT a reliable boundary — a script in an
-// opaque-origin iframe could still reach `parent.api` and the legacy `fs.read*` bridge to
-// read/exfiltrate arbitrary local files. Removing `allow-scripts` closes that hole
-// regardless of `webSecurity`. Pair with {@link HTML_PREVIEW_RESTRICTED_CSP}. Use this —
+// static HTML/CSS. Running NO scripts is the deliberate choice and adds defense in depth
+// beyond the main window's normal same-origin enforcement. Pair with
+// {@link HTML_PREVIEW_RESTRICTED_CSP}. Use this —
 // never the artifact sandbox above — for any file whose contents we don't control.
 export const HTML_PREVIEW_RESTRICTED_SANDBOX = ''
 
 // Strict CSP for untrusted local-file previews, injected as a `<meta http-equiv>` tag.
 // `default-src 'none'` blocks scripts and every network connection; only passive local
 // resources (data/blob/file) are allowed, so a preview cannot phone home or exfiltrate
-// content even though the frame is already script-less. Defense-in-depth behind the sandbox.
+// content. Defense-in-depth behind the sandbox.
 export const HTML_PREVIEW_RESTRICTED_CSP =
   "default-src 'none'; img-src data: blob: file:; media-src data: blob: file:; style-src 'unsafe-inline' file:; font-src data: file:"
 
@@ -31,11 +33,9 @@ interface HtmlPreviewFrameProps {
   title: string
   baseUrl?: string
   emptyText?: string
-  /** iframe `sandbox` value. Defaults to the artifact sandbox (same-origin, for
-   *  screenshot capture); pass {@link HTML_PREVIEW_RESTRICTED_SANDBOX} for untrusted files. */
+  /** iframe `sandbox` value. Defaults to an offline, opaque-origin artifact sandbox. */
   sandbox?: string
-  /** Content-Security-Policy injected as a `<meta http-equiv>` tag. Pass
-   *  {@link HTML_PREVIEW_RESTRICTED_CSP} for untrusted files; omit for trusted artifacts. */
+  /** Content-Security-Policy injected as a `<meta http-equiv>` tag. */
   csp?: string
   iframeRef?: Ref<HTMLIFrameElement>
 }
@@ -82,7 +82,7 @@ export const HtmlPreviewFrame = memo<HtmlPreviewFrameProps>(
     baseUrl = HTML_PREVIEW_DEFAULT_BASE_URL,
     emptyText,
     sandbox = HTML_PREVIEW_IFRAME_SANDBOX,
-    csp,
+    csp = HTML_PREVIEW_DEFAULT_CSP,
     iframeRef
   }) => {
     const withBase = injectHtmlPreviewBase(html, baseUrl)

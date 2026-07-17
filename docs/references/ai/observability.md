@@ -1,123 +1,40 @@
-# Observability
+# Observability in the privacy build
 
-The `src/main/ai/observability/` subsystem: OTel tracing, the local span
-projection, and the sink registry. "Trace / telemetry" is the
-user-facing surface; this doc covers the whole subsystem.
+The privacy branch disables AI telemetry and removes every exporter and
+provider-body capture path. Chat prompts, model responses, tool payloads, and
+Claude Code OTLP events are not collected for tracing or written to trace
+history files.
 
-## What's instrumented
+## Runtime behavior
 
-Every AI SDK call run through Cherry produces an OpenTelemetry span
-tree:
+- `buildTelemetry()` always returns `undefined`, so the AI SDK receives no
+  experimental telemetry configuration or tracer.
+- `ClaudeCodeTraceBridgeService` never supplies OTLP environment variables or
+  starts an ingest endpoint.
+- `NodeTraceService` does not register an OpenTelemetry provider, processor, or
+  exporter.
+- `TraceStorageService` is a compatibility no-op. Its read IPC returns an empty
+  list, and it does not retain or persist spans.
+- The observability sink registry has no registered sinks.
+- Provider requests use their normal fetch implementation. The old developer
+  wrapper that duplicated request and response bodies into trace spans has been
+  removed.
+- Electron crash reporting and renderer stack collection are disabled. Preboot
+  keeps only local process-error logging.
 
-```
-chat.turn                                      (root, created by context provider)
-├── ai.streamText                              (AI SDK auto)
-│   ├── ai.streamText.doStream                 (AI SDK auto)
-│   ├── ai.toolCall (per tool invocation)      (AI SDK auto)
-│   └── ai.streamText.<step>                   (AI SDK auto)
-└── attributes: topicId, modelName, …          (set by AiTurnTrace / AdapterTracer)
-```
+## Compatibility surface
 
-AI SDK's `experimental_telemetry` produces the inner spans; Cherry owns
-the root span through `AiTurnTrace` so it lands in the same observability
-path without going through the AI SDK adapter.
+Some turn-level trace types and calls remain because the stream and agent
+session APIs use trace identifiers as internal correlation values. With no
+registered OpenTelemetry provider, those calls use the default no-op tracer;
+there is no exporter, listener, trace file, or remote destination behind them.
 
-The main-process observability boundary is `src/main/ai/observability`:
+The trace-viewer IPC surface remains so older renderer paths fail closed: reads
+return no data and cleanup requests do nothing.
 
-- `core/` creates Cherry-owned turn roots and common `cs.*` attributes.
-- `adapters/aiSdk/` interprets AI SDK child spans.
-- `adapters/claudeCode/` interprets Claude Code OTLP spans and logs.
-- `storage/` keeps the in-memory span projection and JSONL-compatible history.
-- `sinks/` defines the extension point for local and future external export.
+## Network boundary
 
-## Local history flush
-
-The container `traceId` is persisted on the topic / agent-session row (one trace
-tree per container), but the span tree is first collected in the main-process
-`TraceStorageService` memory store.
-The durable history file is written by the stream terminal path:
-
-- `PersistentChatContextProvider` attaches a `TraceFlushListener` to normal
-  chat turns.
-- `AgentSessionRuntimeService` attaches the same listener to
-  `agent-session:${sessionId}` turns, including queued follow-up turns.
-- On the topic-level terminal event (`done`, `paused`, or `error`),
-  `TraceFlushListener` calls `TraceStorageService.saveSpans(topicId)`.
-- Flush errors are logged as warnings and do not affect message completion.
-
-Collection and persistence are main-process only. Spans live in
-`TraceStorageService`'s in-memory store and are flushed to the JSONL history file
-on the terminal event. The renderer trace viewer (`TracePage`) reads the persisted
-spans on demand through the `trace.getData` IPC — it never collects spans itself.
-
-## AdapterTracer
-
-`src/main/ai/observability/adapters/aiSdk/adapterTracer.ts` wraps the OTel `Tracer` returned
-by the global provider. On every `startSpan` / `startActiveSpan` it:
-
-1. Patches `span.end()` to also call `AiSdkSpanAdapter.convertToSpanEntity(...)`
-   and hand the result to the observability sink registry.
-2. Stamps `trace.topicId` and `trace.modelName` so the main-side
-   `TraceStorageService` can key spans per topic.
-
-`AdapterTracer` is intentionally only for AI SDK child spans:
-
-- `buildTelemetry` (`runtime/aiSdk/params/buildTelemetry.ts`) — passed to AI
-  SDK as `experimental_telemetry.tracer`. Captures every AI SDK auto-span.
-  Returns `undefined` (no telemetry, no tracer) when there is no `topicId`
-  or developer mode is off — see below.
-
-## AiSdkSpanAdapter
-
-`src/main/ai/observability/adapters/aiSdk/aiSdkSpanAdapter.ts` converts an OTel span into the
-`SpanEntity` shape `TraceStorageService` stores and persists:
-
-- Reads span name, attributes, events, status, links.
-- Recovers AI SDK's hierarchical attribute conventions:
-  `ai.xxx` is a level, `ai.xxx.yyy` is a sub-level under it.
-- Normalises usage attributes across the base and LLM spans, preferring AI SDK v6 keys with legacy
-  and semantic-convention fallbacks: input from
-  `ai.usage.inputTokens` / `ai.usage.promptTokens` / `gen_ai.usage.input_tokens` (and the single
-  `ai.usage.tokens` embeddings shape), output from
-  `ai.usage.outputTokens` / `ai.usage.completionTokens` / `gen_ai.usage.output_tokens`, plus
-  `ai.usage.totalTokens`, `ai.usage.cachedInputTokens`, and `ai.usage.reasoningTokens` (emitted as
-  `completion_tokens_details.reasoning_tokens`).
-
-Claude Code Agent SDK spans do not go through `AiSdkSpanAdapter`; they are
-converted by `src/main/ai/observability/adapters/claudeCode/ClaudeCodeOtlpAdapter.ts`.
-
-## Sensitive data capture & redaction
-
-> Cross-referenced from `ClaudeCodeTraceBridgeService.prepareTrace`.
-
-The Claude Code OTLP bridge runs **only when developer mode is enabled**. When
-it does, it intentionally turns on verbose Claude Code telemetry:
-
-- `OTEL_LOG_USER_PROMPTS` — user prompt text
-- `OTEL_LOG_TOOL_DETAILS` / `OTEL_LOG_TOOL_CONTENT` — tool calls and their content
-- `OTEL_LOG_RAW_API_BODIES` — raw API request/response bodies
-
-These payloads land in span attributes that `TraceStorageService` persists as
-**plaintext JSONL trace files on disk**, so a trace can contain secrets
-(authorization headers, API keys embedded in raw bodies) alongside the prompt
-and tool content.
-
-**Redaction is deliberately not done.** Stripping secrets would mean parsing
-arbitrary OTLP attribute structures across the ingest path and would risk
-dropping legitimate trace data. The accepted tradeoff is that capture is
-**local-only and developer-gated**; turning that into a redaction/threat-model
-guarantee is a deferred decision. Treat exported trace files as sensitive.
-
-## Developer-mode gating
-
-Dev mode only. The span projection (`TraceStorageService`) is built and persisted
-in the main process; the renderer trace viewer (`TracePage`) reads it on demand via
-the `trace.getData` IPC. Outside developer mode `buildTelemetry` returns `undefined`,
-so **no tracer is attached at all** and the AI SDK emits no spans — there is nothing
-to project, and the viewer shows an empty trace.
-
-## Where to read more
-
-- Code: `src/main/ai/observability/`
-- Span projection: `src/main/ai/observability/storage/TraceStorageService.ts`
-- AI SDK telemetry docs: https://ai-sdk.dev/docs/reference/ai-sdk-core/telemetry
+This change does not disable network features the user explicitly invokes,
+such as model-provider calls, web search, OAuth, marketplace search, downloads,
+or a manual update check. It removes passive telemetry, background trace
+collection, and automatic trace export.

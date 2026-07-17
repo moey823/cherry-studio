@@ -22,8 +22,11 @@ vi.mock('@application', () => ({
   }
 }))
 
-const { parseOfficeAsyncMock } = vi.hoisted(() => ({ parseOfficeAsyncMock: vi.fn<() => Promise<string>>() }))
-vi.mock('officeparser', () => ({ default: { parseOfficeAsync: parseOfficeAsyncMock } }))
+const { parseOfficeMock, officeToTextMock } = vi.hoisted(() => ({
+  parseOfficeMock: vi.fn(),
+  officeToTextMock: vi.fn()
+}))
+vi.mock('officeparser', () => ({ default: { parseOffice: parseOfficeMock } }))
 
 const { wordExtractMock } = vi.hoisted(() => ({ wordExtractMock: vi.fn() }))
 vi.mock('word-extractor', () => ({
@@ -74,9 +77,11 @@ describe('extractDocumentText — dispatch on entry ext, bytes via FileManager.r
 
   it('extracts office formats via officeparser (buffer)', async () => {
     getByIdMock.mockResolvedValueOnce({ ext: 'docx' })
-    parseOfficeAsyncMock.mockResolvedValueOnce(' office body ')
+    officeToTextMock.mockResolvedValueOnce({ value: ' office body ', messages: [] })
+    parseOfficeMock.mockResolvedValueOnce({ to: officeToTextMock })
     expect(await extractDocumentText('e1')).toBe('office body')
-    expect(parseOfficeAsyncMock).toHaveBeenCalledWith(expect.any(Buffer), { tempFilesLocation: '/tmp' })
+    expect(parseOfficeMock).toHaveBeenCalledWith(expect.any(Buffer))
+    expect(officeToTextMock).toHaveBeenCalledWith('text')
   })
 
   it('decodes text/code files with auto encoding', async () => {

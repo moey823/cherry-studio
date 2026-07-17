@@ -1,9 +1,7 @@
 import { Tooltip } from '@cherrystudio/ui'
 import Favicon from '@renderer/components/icons/FallbackFavicon'
 import MarqueeText from '@renderer/components/MarqueeText'
-import { fetchXOEmbed, isXPostUrl, xOembedKey } from '@renderer/utils/fetch'
-import React, { memo, useCallback, useMemo, useState } from 'react'
-import useSWRImmutable from 'swr/immutable'
+import React, { memo, useCallback, useMemo } from 'react'
 import * as z from 'zod'
 
 import { useOptionalMessageListActions } from '../MessageListProvider'
@@ -29,29 +27,8 @@ const CitationTooltip: React.FC<CitationTooltipProps> = ({ children, citation })
     }
   }, [citation.url])
 
-  const isXPost = useMemo(() => isXPostUrl(citation.url), [citation.url])
-
-  // Defer the X oEmbed network request until the tooltip is actually opened —
-  // firing it on mount for every X-post citation is a perf + privacy leak.
-  // `staleTime: Infinity` keeps the result cached after the first open.
-  const [isOpen, setIsOpen] = useState(false)
-
-  const { data: oembedData } = useSWRImmutable(
-    isXPost && !citation.content?.trim() && isOpen ? xOembedKey(citation.url) : null,
-    () => fetchXOEmbed(citation.url),
-    { shouldRetryOnError: false }
-  )
-
-  const sourceTitle = useMemo(() => {
-    if (isXPost && oembedData?.author) return `@${oembedData.author}`
-    return citation.title?.trim() || hostname
-  }, [citation.title, hostname, isXPost, oembedData])
-
-  const displayContent = useMemo(() => {
-    if (citation.content?.trim()) return citation.content
-    if (isXPost && oembedData?.text) return oembedData.text
-    return undefined
-  }, [citation.content, isXPost, oembedData])
+  const sourceTitle = citation.title?.trim() || hostname
+  const displayContent = citation.content?.trim() || undefined
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -113,7 +90,6 @@ const CitationTooltip: React.FC<CitationTooltipProps> = ({ children, citation })
   return (
     <Tooltip
       content={tooltipContent}
-      onOpenChange={setIsOpen}
       showArrow={false}
       className="rounded-[8px] border border-border bg-card p-3 text-foreground dark:bg-card dark:text-foreground">
       {children}

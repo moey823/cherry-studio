@@ -13,7 +13,6 @@ import * as z from 'zod'
 
 const logger = loggerService.withContext('McpCatalogService')
 const mcpToolsCacheKey = (serverId: string): SharedCacheKey => `mcp.tools.${serverId}` as SharedCacheKey
-const PREWARM_CONCURRENCY = 3
 
 type CachedFunction<T extends unknown[], R> = (...args: T) => Promise<R>
 type ListToolsOptions = { includeDisabled?: boolean }
@@ -69,7 +68,6 @@ function withCache<T extends unknown[], R>(
 @ServicePhase(Phase.WhenReady)
 @DependsOn(['McpRuntimeService'])
 export class McpCatalogService extends BaseService {
-  private prewarmCancelled = false
   /** Single-flights `warmToolsCache` refreshes per serverId so concurrent sessions warming
    *  the same server at once don't each open a connection to it. */
   private readonly warmRefreshInFlight = new Map<string, Promise<void>>()
@@ -95,7 +93,6 @@ export class McpCatalogService extends BaseService {
   readonly onToolsCacheUpdated: Event<{ serverId: string }> = this._onToolsCacheUpdated.event
 
   protected async onInit(): Promise<void> {
-    this.prewarmCancelled = false
     this.registerDisposable(
       application.get('McpRuntimeService').onToolListChanged(({ serverId }) => {
         void this.refreshTools(serverId).catch((error) => {
@@ -104,14 +101,6 @@ export class McpCatalogService extends BaseService {
         })
       })
     )
-  }
-
-  protected async onReady(): Promise<void> {
-    void this.prewarmActiveServerTools()
-  }
-
-  protected async onStop(): Promise<void> {
-    this.prewarmCancelled = true
   }
 
   private getServerById(serverId: string): McpServer {
@@ -226,19 +215,11 @@ export class McpCatalogService extends BaseService {
    * **cache-only** facade: it never connects to the upstream MCP server, so a dead or
    * slow server can't block the agent/chat startup hot path that lists tools (issue
    * #16242). Connecting + listing is owned by `refreshTools` and the background warmers
-   * (`prewarmActiveServerTools`, the `onToolListChanged` refresh, the renderer's
-   * on-demand `refreshTools`). Cold cache → `[]` plus a non-blocking refresh kick; when
-   * that refresh lands, `writeToolsCache` fires `onToolsCacheUpdated`, so snapshot
-   * consumers (the SDK bridge) re-read within the same session instead of waiting for
-   * the next one.
+   * (`onToolListChanged`, an explicit session warm, or the renderer's on-demand
+   * `refreshTools`). A cold cache stays cold until one of those deliberate paths runs.
    */
   public listTools(serverId: string, options: ListToolsOptions = {}): McpTool[] {
     const cached = application.get('CacheService').getShared(mcpToolsCacheKey(serverId)) as McpTool[] | undefined
-    // `undefined` = never warmed (distinct from a warmed-but-empty/dead server that holds `[]`).
-    // Kick a one-shot, non-blocking refresh so the next read is populated; dead servers keep
-    // their `[]` and are not re-probed here. Routed through the single-flighted warm so a kick
-    // racing an in-flight session warm doesn't open a second connection to the same server.
-    if (cached === undefined) void this.warmToolsCache(serverId)
     const tools = cached ?? []
     if (options.includeDisabled || tools.length === 0) return tools
     let server: McpServer | undefined
@@ -299,30 +280,5 @@ export class McpCatalogService extends BaseService {
     const server = this.getServerById(serverId)
     this.clearToolsCache(server)
     await this.listToolsForServer(server, { includeDisabled: true })
-  }
-
-  private async prewarmActiveServerTools(): Promise<void> {
-    try {
-      const { items: servers } = mcpServerService.list({ isActive: true })
-      for (let index = 0; index < servers.length; index += PREWARM_CONCURRENCY) {
-        if (this.prewarmCancelled || this.isStopped || this.isDestroyed) return
-        const batch = servers.slice(index, index + PREWARM_CONCURRENCY)
-        const results = await Promise.allSettled(
-          batch.map((server) => this.listToolsForServer(server, { includeDisabled: true }))
-        )
-        results.forEach((result, resultIndex) => {
-          if (result.status === 'fulfilled') return
-          const server = batch[resultIndex]
-          logger.warn('Failed to prewarm MCP tools catalog', {
-            serverId: server.id,
-            serverName: server.name,
-            error: result.reason
-          })
-          this.clearSharedToolsCache(server.id)
-        })
-      }
-    } catch (error) {
-      logger.warn('Failed to load active MCP servers for tools prewarm', { error })
-    }
   }
 }

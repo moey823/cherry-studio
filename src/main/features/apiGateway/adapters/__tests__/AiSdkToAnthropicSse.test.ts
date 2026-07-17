@@ -462,6 +462,7 @@ describe('AiSdkToAnthropicSse', () => {
           model: 'test',
           container: null,
           stop_reason: null,
+          stop_details: null,
           stop_sequence: null,
           usage: {
             input_tokens: 10,

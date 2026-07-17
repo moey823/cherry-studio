@@ -96,14 +96,9 @@ export { validateManagedBinary }
 @ServicePhase(Phase.Background)
 export class BinaryManager extends BaseService {
   private miseBin: string | null = null
-  // Built lazily on first mise invocation, never in onInit(): the isolated env is
-  // only ever consumed by runMise() (install/reconcile/remove/search), none of
-  // which run during init. buildIsolatedEnv() blocks on a region lookup
-  // (regionService.isInChina, for China mirror selection) whose cache is cold on
-  // every launch, so building it eagerly put a network round-trip on the
-  // Background-phase critical path that gates allReady(), for a value most
-  // launches never use. `isolatedEnvPromise` memoizes the in-flight build so
-  // concurrent first callers share a single build and a single region lookup.
+  // Built lazily on the first explicit mise invocation, never in onInit(). The
+  // region choice is local/static in this privacy build, and no registry lookup
+  // or installer runs merely because the application started.
   private isolatedEnv: Record<string, string> | null = null
   private isolatedEnvPromise: Promise<Record<string, string>> | null = null
   private registryCache: Array<{ name: string; tool: string }> | null = null
@@ -121,9 +116,7 @@ export class BinaryManager extends BaseService {
       return
     }
     logger.info('mise binary found', { path: this.miseBin })
-    // isolatedEnv is built lazily on first runMise() — see getIsolatedEnv() and
-    // the isolatedEnv field comment. Building it here would block init on a
-    // region lookup that nothing in the init path consumes.
+    // isolatedEnv is built lazily on first runMise() — see getIsolatedEnv().
   }
 
   protected override onAllReady() {
@@ -137,9 +130,8 @@ export class BinaryManager extends BaseService {
         removed: tools.filter((t) => predefinedNames.has(t.name)).map((t) => t.name)
       })
     }
-    if (cleaned.length > 0) {
-      this.reconcile(cleaned).catch((err) => logger.error('Initial reconcile failed', err))
-    }
+    // Privacy build: managed tools are reconciled only from an explicit user
+    // action. Startup must not query registries or download tool updates.
   }
 
   /** Current persisted install state. Consumed by the `binary.get_state` route. */
@@ -332,15 +324,7 @@ export class BinaryManager extends BaseService {
     return merged
   }
 
-  /**
-   * Lazily build (and memoize) the isolated mise env on first use. Deferred out
-   * of onInit() because buildIsolatedEnv() blocks on a region lookup
-   * (regionService.isInChina) that has no place on the startup critical path —
-   * see the isolatedEnv field comment. The in-flight promise is cached so
-   * concurrent first callers share a single build and a single region lookup; a
-   * failed build is not cached, so a later call can retry once a transient cause
-   * (e.g. mkdir failure) clears.
-   */
+  /** Lazily build and memoize the isolated mise environment on explicit use. */
   private getIsolatedEnv(): Promise<Record<string, string>> {
     if (this.isolatedEnv) {
       return Promise.resolve(this.isolatedEnv)

@@ -1,5 +1,4 @@
 import { loggerService } from '@logger'
-import { ipcApi } from '@renderer/ipc'
 import type { SerializedError } from '@renderer/types/error'
 import { fetchGenerate } from '@renderer/utils/aiGeneration'
 import { readDefaultModel } from '@renderer/utils/model'
@@ -24,30 +23,11 @@ export interface DiagnosisContext {
   modelId?: string
 }
 
-async function getCherryAiFreeModel(): Promise<Model | undefined> {
-  try {
-    const models = await ipcApi.request('ai.list_models', { providerId: 'cherryai' })
-    const first = models[0]
-    // listModels returns Partial<Model>; the diagnosis flow only needs `.id`,
-    // which the IPC always populates. Cast through the known-complete subset.
-    return first?.id ? (first as Model) : undefined
-  } catch {
-    logger.warn('Failed to fetch CherryAI free models')
-    return undefined
-  }
-}
-
 async function buildModelsToTry(context?: DiagnosisContext): Promise<Model[]> {
   const defaultModel = await readDefaultModel()
   const models: Model[] = []
 
-  // CherryAI free model as primary diagnosis model
-  const cherryModel = await getCherryAiFreeModel()
-  if (cherryModel) {
-    models.push(cherryModel)
-  }
-
-  // User's default model as fallback (skip if same as failing model)
+  // Use only the model the user explicitly configured as their default.
   if (defaultModel && defaultModel.id !== context?.modelId && !models.some((m) => m.id === defaultModel.id)) {
     models.push(defaultModel)
   }

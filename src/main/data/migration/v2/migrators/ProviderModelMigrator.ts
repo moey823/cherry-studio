@@ -18,7 +18,6 @@ import type { InsertUserModelRow } from '@data/db/schemas/userModel'
 import { userModelTable } from '@data/db/schemas/userModel'
 import type { InsertUserProviderRow } from '@data/db/schemas/userProvider'
 import { userProviderTable } from '@data/db/schemas/userProvider'
-import { ensureCherryAiDefaultProviderAndModelTx } from '@data/db/seeding/seeders/cherryaiDefaultModelSeeder'
 import { assignOrderKeysByScope, assignOrderKeysInSequence } from '@data/migration/v2/utils/orderKey'
 import { applyUserOverlay } from '@data/services/ModelService'
 import { extractReasoningFormatTypes, mergePresetModel } from '@data/services/ProviderRegistryService'
@@ -26,11 +25,10 @@ import { generateOrderKeySequenceBetween } from '@data/services/utils/orderKey'
 import { loggerService } from '@logger'
 import type { Provider as LegacyProvider } from '@main/data/migration/legacyTypes'
 import type { ExecuteResult, PrepareResult, ValidateResult } from '@shared/data/migration/v2/types'
-import { CHERRYAI_DEFAULT_UNIQUE_MODEL_ID, CHERRYAI_PROVIDER_ID } from '@shared/data/presets/cherryai'
 import { providerLogoRef } from '@shared/data/types/file'
 import { createUniqueModelId, isUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
 import type { ApiFeatures, EndpointConfig } from '@shared/data/types/provider'
-import { desc, eq, ne, sql } from 'drizzle-orm'
+import { desc, eq, sql } from 'drizzle-orm'
 
 import type { MigrationContext } from '../core/MigrationContext'
 import { BaseMigrator } from './BaseMigrator'
@@ -304,7 +302,6 @@ export class ProviderModelMigrator extends BaseMigrator {
       const seenIds = new Set<string>()
       const dedupedProviders: LegacyProvider[] = []
       let skippedProviders = 0
-      let skippedManagedProviders = 0
       let skippedRetiredProviders = 0
       let skippedInvalidId = 0
       let skippedInvalidModels = 0
@@ -334,10 +331,6 @@ export class ProviderModelMigrator extends BaseMigrator {
           logger.warn('Provider with missing or empty id skipped', { name: provider?.name })
           continue
         }
-        if (provider.id === CHERRYAI_PROVIDER_ID) {
-          skippedManagedProviders++
-          continue
-        }
         if (RETIRED_PROVIDER_IDS.has(provider.id)) {
           skippedRetiredProviders++
           continue
@@ -358,7 +351,6 @@ export class ProviderModelMigrator extends BaseMigrator {
         return count + uniqueModelIds.size
       }, 0)
       const validModelIds = new Set<UniqueModelId>([
-        CHERRYAI_DEFAULT_UNIQUE_MODEL_ID,
         ...this.providers.flatMap((provider) =>
           Array.from(new Set((provider.models ?? []).map((model) => model.id)))
             .map((modelId) => createModelId(provider.id, modelId))
@@ -367,9 +359,6 @@ export class ProviderModelMigrator extends BaseMigrator {
       ])
       this.pinnedModelIds = normalizePinnedModelIds(ctx.sources.dexieSettings.get('pinned:models'), validModelIds)
 
-      if (skippedManagedProviders > 0) {
-        warnings.push(`Skipped ${skippedManagedProviders} managed CherryAI provider(s)`)
-      }
       if (skippedRetiredProviders > 0) {
         warnings.push(`Skipped ${skippedRetiredProviders} retired provider(s)`)
       }
@@ -388,7 +377,6 @@ export class ProviderModelMigrator extends BaseMigrator {
 
       logger.info('Preparation completed', {
         providerCount: this.providers.length,
-        skippedManagedProviders,
         skippedRetiredProviders,
         skippedProviders,
         modelCount: this.totalModelCount,
@@ -445,8 +433,6 @@ export class ProviderModelMigrator extends BaseMigrator {
       }
 
       ctx.db.transaction((tx) => {
-        ensureCherryAiDefaultProviderAndModelTx(tx)
-
         // Insert file_entries before the ref rows (their `file_entry_id` FK
         // needs them); the ref rows themselves go in after the owner rows exist
         // (their `source_id` FK needs the provider), below.
@@ -552,16 +538,8 @@ export class ProviderModelMigrator extends BaseMigrator {
     try {
       const errors: { key: string; message: string }[] = []
 
-      const providerResult = ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(userProviderTable)
-        .where(ne(userProviderTable.providerId, CHERRYAI_PROVIDER_ID))
-        .get()
-      const modelResult = ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(userModelTable)
-        .where(ne(userModelTable.providerId, CHERRYAI_PROVIDER_ID))
-        .get()
+      const providerResult = ctx.db.select({ count: sql<number>`count(*)` }).from(userProviderTable).get()
+      const modelResult = ctx.db.select({ count: sql<number>`count(*)` }).from(userModelTable).get()
       const pinResult = ctx.db
         .select({ count: sql<number>`count(*)` })
         .from(pinTable)

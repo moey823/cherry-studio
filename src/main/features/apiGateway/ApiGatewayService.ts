@@ -1,5 +1,4 @@
 import { application } from '@application'
-import { agentService } from '@data/services/AgentService'
 import { loggerService } from '@logger'
 import { createLatestReconciler, type LatestReconciler } from '@main/core/concurrency/latestReconciler'
 import { type Activatable, BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
@@ -54,9 +53,10 @@ export class ApiGatewayService extends BaseService implements Activatable {
   }
 
   protected async onReady(): Promise<void> {
-    this.desiredEnabled = this.shouldAutoStart()
-    this.reconciler.request()
-    await this.reconciler.flush()
+    // Privacy build: never open a listening socket merely because a stored
+    // preference or agent record exists. The gateway starts only after an
+    // explicit start request or a preference change made during this session.
+    this.desiredEnabled = false
   }
 
   async onActivate(): Promise<void> {
@@ -163,32 +163,5 @@ export class ApiGatewayService extends BaseService implements Activatable {
       logger.info('Generated new API key')
     }
     return apiKey
-  }
-
-  private shouldAutoStart(): boolean {
-    try {
-      const config = this.getCurrentConfig()
-      // Never log the raw API key — redact before emitting.
-      logger.info('API gateway config:', { ...config, apiKey: config.apiKey ? '[redacted]' : null })
-
-      if (config.enabled) {
-        return true
-      }
-
-      try {
-        const { total } = agentService.listAgents({ limit: 1 })
-        if (total > 0) {
-          logger.info(`Detected ${total} agent(s), auto-starting API gateway`)
-          return true
-        }
-      } catch (error: any) {
-        logger.warn('Failed to check agent count:', error)
-      }
-
-      return false
-    } catch (error: any) {
-      logger.error('Failed to check API gateway auto-start condition:', error)
-      return false
-    }
   }
 }

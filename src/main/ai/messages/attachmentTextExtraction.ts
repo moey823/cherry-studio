@@ -43,8 +43,10 @@ async function extract(entryId: FileEntryId, ext: string): Promise<string> {
     return extracted.getBody().trim()
   }
   if (OFFICE_PARSER_EXTS.has(ext)) {
-    const text = await officeParser.parseOfficeAsync(buffer, { tempFilesLocation: application.getPath('app.temp') })
-    return text.trim()
+    const document = await officeParser.parseOffice(buffer)
+    const { value } = await document.to('text')
+    if (typeof value !== 'string') throw new Error('Office parser returned non-text output')
+    return value.trim()
   }
   return decodeTextWithAutoEncoding(buffer).trim()
 }

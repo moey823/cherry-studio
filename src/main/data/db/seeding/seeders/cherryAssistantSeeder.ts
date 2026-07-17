@@ -1,12 +1,10 @@
 import { agentTable } from '@data/db/schemas/agent'
 import { agentSessionTable } from '@data/db/schemas/agentSession'
-import { userModelTable } from '@data/db/schemas/userModel'
 import { agentService } from '@data/services/AgentService'
 import { agentSessionService } from '@data/services/AgentSessionService'
 import type { AgentConfiguration } from '@shared/data/api/schemas/agents'
 import { AGENT_WORKSPACE_TYPE } from '@shared/data/api/schemas/agentWorkspaces'
-import { CHERRYAI_DEFAULT_UNIQUE_MODEL_ID } from '@shared/data/presets/cherryai'
-import { count, eq } from 'drizzle-orm'
+import { count } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 
 import type { DbOrTx, DbType, ISeeder } from '../../types'
@@ -48,7 +46,7 @@ export class CherryAssistantSeeder implements ISeeder {
         name: CHERRY_ASSISTANT_SEED.name,
         description: '',
         instructions: '',
-        model: this.getCherryAiDefaultModelId(tx),
+        model: null,
         configuration: { ...CHERRY_ASSISTANT_SEED.configuration }
       })
 
@@ -73,15 +71,5 @@ export class CherryAssistantSeeder implements ISeeder {
 
     const [{ sessionCount }] = tx.select({ sessionCount: count() }).from(agentSessionTable).all()
     return sessionCount > 0
-  }
-
-  private getCherryAiDefaultModelId(tx: DbOrTx): string | null {
-    const [model] = tx
-      .select({ id: userModelTable.id })
-      .from(userModelTable)
-      .where(eq(userModelTable.id, CHERRYAI_DEFAULT_UNIQUE_MODEL_ID))
-      .limit(1)
-      .all()
-    return model?.id ?? null
   }
 }

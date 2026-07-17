@@ -65,7 +65,9 @@ export class ChannelManager extends BaseService {
   private readonly channelStatuses = new Map<string, ChannelStatusEvent>()
 
   protected async onReady(): Promise<void> {
-    await this.start()
+    // Privacy build: persistent messaging channels never connect merely because
+    // the application launched. Toggling/configuring a channel explicitly calls
+    // syncChannel(), which remains the opt-in connection path.
   }
 
   protected async onStop(): Promise<void> {

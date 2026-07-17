@@ -2,7 +2,6 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 import { WindowType } from '@main/core/window/types'
-import { CHERRYAI_DEFAULT_UNIQUE_MODEL_ID } from '@shared/data/presets/cherryai'
 import { MockMainCacheServiceUtils } from '@test-mocks/main/CacheService'
 import { MockMainPreferenceServiceUtils } from '@test-mocks/main/PreferenceService'
 import { mockMainLoggerService } from '@test-mocks/MainLoggerService'
@@ -115,6 +114,7 @@ describe('TopicNamingService', () => {
     mockMainLoggerService.warn.mockClear()
     mockMainLoggerService.debug.mockClear()
     MockMainPreferenceServiceUtils.setPreferenceValue('topic.naming.enabled', true)
+    MockMainPreferenceServiceUtils.setPreferenceValue('topic.naming.model_id', 'openai::gpt-4o-mini')
     mocks.getModelByKey.mockReturnValue({ id: 'openai::gpt-4o-mini' })
     mocks.getProviderByProviderId.mockReturnValue({ authMethods: ['api-key'] })
     mockRenameInputs()
@@ -156,7 +156,7 @@ describe('TopicNamingService', () => {
     })
   })
 
-  it('falls back to the managed CherryAI default when topic naming model preference is empty', async () => {
+  it('skips summary naming when no naming model is configured', async () => {
     MockMainPreferenceServiceUtils.setPreferenceValue('topic.naming.model_id', null)
 
     await createService().maybeRenameFromConversationSummary('topic-1', undefined, 'message-1', {
@@ -164,15 +164,11 @@ describe('TopicNamingService', () => {
       parts: [{ type: 'text', text: 'Assistant response' }]
     } as never)
 
-    expect(mocks.generateText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        assistantId: undefined,
-        uniqueModelId: CHERRYAI_DEFAULT_UNIQUE_MODEL_ID
-      })
-    )
+    expect(mocks.generateText).not.toHaveBeenCalled()
+    expect(mocks.updateTopic).not.toHaveBeenCalled()
   })
 
-  it('falls back to the managed CherryAI default when topic naming model preference is invalid', async () => {
+  it('skips summary naming when the naming model preference is invalid', async () => {
     MockMainPreferenceServiceUtils.setPreferenceValue('topic.naming.model_id', 'bad-value')
 
     await createService().maybeRenameFromConversationSummary('topic-1', undefined, 'message-1', {
@@ -180,18 +176,14 @@ describe('TopicNamingService', () => {
       parts: [{ type: 'text', text: 'Assistant response' }]
     } as never)
 
-    expect(mocks.generateText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        uniqueModelId: CHERRYAI_DEFAULT_UNIQUE_MODEL_ID
-      })
-    )
+    expect(mocks.generateText).not.toHaveBeenCalled()
     expect(mockMainLoggerService.warn).toHaveBeenCalledWith(
-      'topic.naming.model_id is invalid; falling back to managed CherryAI default model',
+      'topic.naming.model_id is invalid; automatic summary naming is skipped',
       { configured: 'bad-value' }
     )
   })
 
-  it('falls back to the managed CherryAI default when topic naming model no longer exists', async () => {
+  it('skips summary naming when the configured naming model no longer exists', async () => {
     MockMainPreferenceServiceUtils.setPreferenceValue('topic.naming.model_id', 'ghost::missing')
     mocks.getModelByKey.mockImplementation(() => {
       throw new Error('missing model')
@@ -203,13 +195,9 @@ describe('TopicNamingService', () => {
     } as never)
 
     expect(mocks.getModelByKey).toHaveBeenCalledWith('ghost', 'missing')
-    expect(mocks.generateText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        uniqueModelId: CHERRYAI_DEFAULT_UNIQUE_MODEL_ID
-      })
-    )
+    expect(mocks.generateText).not.toHaveBeenCalled()
     expect(mockMainLoggerService.warn).toHaveBeenCalledWith(
-      'topic.naming.model_id points to a missing model; falling back to managed CherryAI default model',
+      'topic.naming.model_id points to a missing model; automatic summary naming is skipped',
       { configured: 'ghost::missing' }
     )
   })
@@ -529,7 +517,7 @@ describe('TopicNamingService', () => {
     expect(mocks.broadcast).not.toHaveBeenCalled()
   })
 
-  it('falls back when topic naming model points to an external-CLI (agent-only) provider', async () => {
+  it('skips naming when the configured model uses an external-CLI provider', async () => {
     MockMainPreferenceServiceUtils.setPreferenceValue('topic.naming.model_id', 'claude-code::haiku')
     mocks.getProviderByProviderId.mockReturnValue({ authMethods: ['external-cli'] })
     mocks.getSession.mockReturnValue({
@@ -545,13 +533,9 @@ describe('TopicNamingService', () => {
     } as never)
 
     expect(mocks.getModelByKey).not.toHaveBeenCalledWith('claude-code', 'haiku')
-    expect(mocks.generateText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        uniqueModelId: CHERRYAI_DEFAULT_UNIQUE_MODEL_ID
-      })
-    )
+    expect(mocks.generateText).not.toHaveBeenCalled()
     expect(mockMainLoggerService.warn).toHaveBeenCalledWith(
-      'topic.naming.model_id points to an external-CLI (agent-only) provider; falling back to managed CherryAI default model',
+      'topic.naming.model_id points to an external-CLI (agent-only) provider; automatic summary naming is skipped',
       { configured: 'claude-code::haiku' }
     )
   })

@@ -24,7 +24,7 @@ translate, summarisation) and the renderer-side transport that connects to it.
 | [Tool Registry](./tool-registry.md) | Built-in tools (knowledge / web search), MCP tools, meta-tools (`tool_search` / `tool_inspect` / `tool_invoke` / `tool_exec`), deferred exposition |
 | [Chat Attachments](./chat-attachments.md) | How attached files reach the model: native file parts when supported, capped extracted text otherwise, `read_file` for overflow paging |
 | [Provider Resolution](./provider-resolution.md) | `Provider.endpointConfigs` schema, endpoint resolution chain, variant suffixes, custom provider extensions (aihubmix, newapi) |
-| [Observability (trace / telemetry)](./observability.md) | `AiSdkSpanAdapter`, root span propagation, OTel attribute shape, local span projection, sinks |
+| [Observability (privacy build)](./observability.md) | Disabled telemetry/export paths and the no-op compatibility surface |
 
 ### Renderer-side glue
 
@@ -74,7 +74,7 @@ src/main/ai/
 │       │                            mcp/ (server → ToolEntry sync), meta/ (tool_search/inspect/invoke;
 │       │                            tool_exec defined but not injected), exposition/ (shouldDefer + applyDefer)
 │       └── claudeCode/           ← agentTools.ts (registry → Claude Code runtime)
-├── observability/                ← AI trace adapters (aiSdk / claudeCode), local projection, sinks
+├── observability/                ← privacy-safe no-op trace compatibility; no exporters or payload capture
 ├── messages/                     ← UI part → AI SDK part conversion
 ├── types/                        ← AppProviderId, merged extension types, request types
 └── utils/                        ← reasoning / model parameters / options / websearch helpers

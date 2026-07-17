@@ -60,6 +60,9 @@ describe('ImageViewer', () => {
   it('opens the shared preview dialog when clicked', () => {
     render(<ImageViewer src="https://example.com/image.png" alt="Example image" />)
 
+    expect(screen.queryByRole('img', { name: 'Example image' })).not.toBeInTheDocument()
+    expect(mocks.fetch).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /preview\.load_remote_image/ }))
     fireEvent.click(screen.getByRole('img', { name: 'Example image' }))
 
     expect(screen.getByTestId('image-preview-dialog')).toBeInTheDocument()
@@ -68,14 +71,42 @@ describe('ImageViewer', () => {
   it('respects preview=false', () => {
     render(<ImageViewer src="https://example.com/image.png" alt="Example image" preview={false} />)
 
+    fireEvent.click(screen.getByRole('button', { name: /preview\.load_remote_image/ }))
     fireEvent.click(screen.getByRole('img', { name: 'Example image' }))
 
     expect(screen.queryByTestId('image-preview-dialog')).not.toBeInTheDocument()
   })
 
+  it('requires separate approval before loading each remote image in a preview set', () => {
+    const firstSrc = 'https://first.example/image.png'
+    const secondSrc = 'https://second.example/image.png'
+
+    render(
+      <ImageViewer
+        src={firstSrc}
+        alt="First image"
+        preview={{
+          items: [
+            { alt: 'First image', id: 'first', src: firstSrc },
+            { alt: 'Second image', id: 'second', src: secondSrc }
+          ]
+        }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /preview\.load_remote_image/ }))
+    fireEvent.click(screen.getByRole('img', { name: 'First image' }))
+    fireEvent.click(screen.getByRole('button', { name: 'preview.next' }))
+
+    expect(screen.queryByRole('img', { name: 'Second image' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /preview\.load_remote_image/ }))
+    expect(screen.getByRole('img', { name: 'Second image' })).toBeInTheDocument()
+  })
+
   it('copies image source from the context menu', async () => {
     render(<ImageViewer src="https://example.com/image.png" alt="Example image" />)
 
+    fireEvent.click(screen.getByRole('button', { name: /preview\.load_remote_image/ }))
     fireEvent.contextMenu(screen.getByRole('img', { name: 'Example image' }))
     fireEvent.click(screen.getByRole('button', { name: 'preview.copy.src' }))
 

@@ -18,9 +18,11 @@ describe('HtmlPreviewFrame', () => {
     const iframe = container.querySelector('iframe')
 
     expect(iframe).not.toBeNull()
-    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms')
+    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts')
     expect(iframe).toHaveAttribute('title', 'common.html_preview')
     expect(iframe?.getAttribute('srcdoc')).toContain('<base href="about:srcdoc">')
+    expect(iframe?.getAttribute('srcdoc')).toContain("connect-src 'none'")
+    expect(iframe?.getAttribute('srcdoc')).toContain("frame-src 'none'")
   })
 
   it('renders untrusted local files in a fully restricted, script-less sandbox with a strict CSP', () => {
@@ -35,8 +37,7 @@ describe('HtmlPreviewFrame', () => {
 
     const iframe = container.querySelector('iframe')
 
-    // The main window runs with `webSecurity: false`, so an opaque-origin iframe is not a
-    // reliable boundary — the only robust exfiltration guard is to run no scripts at all.
+    // Keep a script-less iframe and an explicit CSP in addition to Electron's webSecurity boundary.
     expect(iframe).toHaveAttribute('sandbox', '')
     expect(iframe?.getAttribute('sandbox')).not.toContain('allow-scripts')
     expect(iframe?.getAttribute('sandbox')).not.toContain('allow-same-origin')

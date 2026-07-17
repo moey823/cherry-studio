@@ -7,7 +7,6 @@ import { loggerService } from '@logger'
 import type { AiGenerateRequest } from '@main/ai/AiService'
 import { WindowType } from '@main/core/window/types'
 import { messageService } from '@main/data/services/MessageService'
-import { CHERRYAI_DEFAULT_UNIQUE_MODEL_ID } from '@shared/data/presets/cherryai'
 import type { Message, MessageData, UIMessage } from '@shared/data/types/message'
 import { parseUniqueModelId, type UniqueModelId, UniqueModelIdSchema } from '@shared/data/types/model'
 import type { Topic } from '@shared/data/types/topic'
@@ -185,6 +184,7 @@ export class TopicNamingService {
       ]
 
       const uniqueModelId = this.resolveNamingModelId()
+      if (!uniqueModelId) return
       const title = await this.generateSummaryTitle(
         assistantId,
         uniqueModelId,
@@ -274,6 +274,7 @@ export class TopicNamingService {
       if (session.isNameManuallyEdited) return
       if (!canAutoRenameAgentSessionName(session.name, userText)) return
       const uniqueModelId = this.resolveNamingModelId()
+      if (!uniqueModelId) return
 
       const structuredConversation: StructuredMessage[] = [
         { role: 'user', mainText: cleanMarkdownImages(userText) },
@@ -360,14 +361,14 @@ export class TopicNamingService {
     return (configuredPrompt || FALLBACK_PROMPT).replaceAll('{{language}}', language)
   }
 
-  private resolveNamingModelId(): UniqueModelId {
+  private resolveNamingModelId(): UniqueModelId | null {
     const configured = application.get('PreferenceService').get('topic.naming.model_id')
     const parsed = UniqueModelIdSchema.safeParse(configured)
     if (!parsed.success) {
       if (configured != null) {
-        logger.warn('topic.naming.model_id is invalid; falling back to managed CherryAI default model', { configured })
+        logger.warn('topic.naming.model_id is invalid; automatic summary naming is skipped', { configured })
       }
-      return CHERRYAI_DEFAULT_UNIQUE_MODEL_ID
+      return null
     }
 
     const { providerId, modelId } = parseUniqueModelId(parsed.data)
@@ -379,19 +380,19 @@ export class TopicNamingService {
       const provider = providerService.getByProviderId(providerId)
       if (isExternalCliProvider(provider)) {
         logger.warn(
-          'topic.naming.model_id points to an external-CLI (agent-only) provider; falling back to managed CherryAI default model',
+          'topic.naming.model_id points to an external-CLI (agent-only) provider; automatic summary naming is skipped',
           { configured }
         )
-        return CHERRYAI_DEFAULT_UNIQUE_MODEL_ID
+        return null
       }
 
       modelService.getByKey(providerId, modelId)
       return parsed.data
     } catch (error) {
-      logger.warn('topic.naming.model_id points to a missing model; falling back to managed CherryAI default model', {
+      logger.warn('topic.naming.model_id points to a missing model; automatic summary naming is skipped', {
         configured
       })
-      return CHERRYAI_DEFAULT_UNIQUE_MODEL_ID
+      return null
     }
   }
 

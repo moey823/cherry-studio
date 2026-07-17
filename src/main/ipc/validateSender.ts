@@ -63,9 +63,8 @@ export function isTrustedSenderUrl(url: string, devServerUrl: string | null | un
  *
  * Because one channel funnels every business capability into one handler, the
  * router validates the *caller* before the input: all web frames (including
- * iframes and `<webview>` guests) can send IPC, and this app runs with
- * `webviewTag: true` + `webSecurity: false` + MiniApps rendering arbitrary
- * remote URLs. Per Electron's security checklist, verify `senderFrame`.
+ * iframes and `<webview>` guests) can send IPC, and MiniApps may render
+ * arbitrary remote URLs. Per Electron's security checklist, verify `senderFrame`.
  *
  * `appRootDir` (the app's own bundle root, e.g. `application.getPath('app.root')`)
  * is injected so the `file:` check enforces "the app's own renderer" rather than
@@ -79,8 +78,7 @@ export function validateSender(event: IpcMainInvokeEvent, appRootDir: string): b
   if (!frame) return false
 
   // Only the top-level frame may reach IpcApi. A sub-frame (e.g. an <iframe>
-  // embedding content inside an app window, which shares the renderer with
-  // webSecurity:false) must be rejected even if its URL looks app-owned —
+  // embedding content inside an app window) must be rejected even if its URL looks app-owned —
   // `WebFrameMain.parent` is null only for the top frame.
   if (frame.parent !== null) return false
 

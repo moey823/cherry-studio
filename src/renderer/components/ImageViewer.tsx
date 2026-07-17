@@ -1,6 +1,8 @@
 import {
+  Button,
   type ImagePreviewAction,
   ImagePreviewDialog,
+  ImagePreviewImage,
   type ImagePreviewItem,
   type ImagePreviewLabels
 } from '@cherrystudio/ui'
@@ -87,8 +89,32 @@ const getPreviewIndex = (items: ImagePreviewItem[], src: string, fallbackIndex =
   return matchedIndex >= 0 ? matchedIndex : fallbackIndex
 }
 
+const isRemoteImageSource = (src: string) => /^https?:\/\//i.test(src)
+
+const getRemoteImageHostname = (src: string) => {
+  try {
+    return new URL(src).hostname
+  } catch {
+    return 'remote host'
+  }
+}
+
 const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, preview, src, ...props }) => {
   const { t } = useTranslation()
+  const isRemoteSource = isRemoteImageSource(src)
+  const [approvedRemoteSources, setApprovedRemoteSources] = React.useState<ReadonlySet<string>>(() => new Set())
+
+  React.useEffect(() => {
+    setApprovedRemoteSources(new Set())
+  }, [src])
+
+  const approveRemoteSource = React.useCallback((remoteSrc: string) => {
+    setApprovedRemoteSources((current) => {
+      const next = new Set(current)
+      next.add(remoteSrc)
+      return next
+    })
+  }, [])
   const previewConfig = typeof preview === 'object' ? preview : undefined
   const previewEnabled = preview !== false
   const previewSrc = previewConfig?.src ?? src
@@ -275,6 +301,15 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
     })
   )
 
+  if (isRemoteSource && !approvedRemoteSources.has(src)) {
+    return (
+      <Button type="button" variant="outline" onClick={() => approveRemoteSource(src)} title={src}>
+        {t('preview.load_remote_image', { hostname: getRemoteImageHostname(src) })}
+        {typeof alt === 'string' && alt ? `: ${alt}` : ''}
+      </Button>
+    )
+  }
+
   const image = (
     <img
       alt={alt}
@@ -306,6 +341,18 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
           onActiveIndexChange={setActiveIndex}
           onOpenChange={setOpen}
           open={open}
+          renderImage={(item, { transform }) => {
+            if (isRemoteImageSource(item.src) && !approvedRemoteSources.has(item.src)) {
+              return (
+                <Button type="button" variant="outline" onClick={() => approveRemoteSource(item.src)} title={item.src}>
+                  {t('preview.load_remote_image', { hostname: getRemoteImageHostname(item.src) })}
+                  {item.alt ? `: ${item.alt}` : ''}
+                </Button>
+              )
+            }
+
+            return <ImagePreviewImage item={item} transform={transform.transform} />
+          }}
           toolbarActions={toolbarActions}
         />
       )}

@@ -1,8 +1,7 @@
 export const defaultAppHeaders = () => {
-  return {
-    'HTTP-Referer': 'https://cherry-ai.com',
-    'X-Title': 'Cherry Studio'
-  }
+  // Provider requests must not advertise the desktop client or create an
+  // attribution trail unless the user adds those headers explicitly.
+  return {}
 }
 
 /**

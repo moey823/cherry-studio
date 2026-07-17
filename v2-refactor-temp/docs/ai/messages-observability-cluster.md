@@ -52,18 +52,11 @@ upload path is queued as
 namespace; used by `assembleSystemPrompt` (params cluster) when
 `tool_search` is in the final tool set.
 
-### `observability/adapters/aiSdk/adapterTracer.ts`
+### `observability/`
 
-Wraps an OTel tracer. On every span start, patches `span.end()` to also
-convert via `AiSdkSpanAdapter.convertToSpanEntity(...)` and persist via
-`SpanCacheService.saveEntity(...)`. Used by `buildTelemetry` (passed
-to AI SDK) and by chat-context providers (root span).
-
-### `observability/adapters/ai-sdk/aiSdkSpanAdapter.ts`
-
-656-line file that knows AI SDK's hierarchical attribute conventions
-(`ai.xxx` is a level, `ai.xxx.yyy` is a sub-level). Normalises usage
-attributes (`ai.usage.input_tokens` etc.) across providers.
+The privacy build keeps only a no-op compatibility surface for existing
+trace call sites. AI SDK telemetry, provider-body capture, OTLP ingestion,
+local span persistence, and external exporters are disabled or removed.
 
 ### `utils/reasoning.ts`
 

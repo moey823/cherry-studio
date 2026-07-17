@@ -111,9 +111,7 @@ function HtmlPreviewContent({ loadState, fileName, baseUrl, mode }: HtmlPreviewC
   if (loadState.content.trim().length === 0) return <HtmlPreviewEmpty />
 
   // Local files are untrusted: use the fully-restricted, script-less sandbox plus a strict
-  // CSP. Because the main window runs with `webSecurity: false`, dropping `allow-same-origin`
-  // alone is not a boundary — only running no scripts reliably keeps a malicious file from
-  // reaching `parent.api` to read/exfiltrate other local files.
+  // CSP. This is defense-in-depth behind the main window's normal web security boundary.
   return (
     <HtmlPreviewFrame
       html={loadState.content}

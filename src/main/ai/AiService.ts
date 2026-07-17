@@ -40,8 +40,8 @@ import type { ImageGenerationJobOutput, ImageGenerationJobPayload } from './prov
 import { buildVendorProviderOptions } from './provider/custom/wire/buildImageRequest'
 import { DEFAULT_DIFFUSION_REGISTRATION, WIRE_REGISTRY } from './provider/custom/wire/wireProfile'
 import { listModels as listModelsFromProvider } from './provider/listModels'
-import type { AgentLoopHooks, RequestFeature } from './runtime/aiSdk'
-import { Agent, buildAgentParams, mergeUsage, ZERO_USAGE } from './runtime/aiSdk'
+import type { RequestFeature } from './runtime/aiSdk'
+import { Agent, buildAgentParams } from './runtime/aiSdk'
 import { skillService } from './skills/SkillService'
 import { WebContentsListener } from './streamManager'
 import { registerBuiltinTools } from './tools/adapters/aiSdk/builtin/registerBuiltinTools'
@@ -408,21 +408,11 @@ export class AiService extends BaseService {
       tools,
       system,
       options,
-      hookParts: [this.analyticsHookPart(model), ...hookParts],
+      hookParts,
       mediaCapabilities: resolveMediaCapabilities(model)
     })
 
     return agent.stream(preparedMessages, signal)
-  }
-
-  private analyticsHookPart(model: Model): Partial<AgentLoopHooks> {
-    let total: LanguageModelUsage = ZERO_USAGE
-    return {
-      onStepFinish: (step) => {
-        if (step.usage) total = mergeUsage(total, step.usage)
-      },
-      onFinish: () => this.trackUsage(model, total)
-    }
   }
 
   // ── Non-streaming text generation (agent.generate) ──
@@ -434,7 +424,7 @@ export class AiService extends BaseService {
     logger.info('generateText started', { assistantId: request.assistantId })
     const signal = request.requestOptions?.signal
 
-    const { sdkConfig, tools, plugins, system, options, model, hookParts } = await this.buildAgentParamsFor(
+    const { sdkConfig, tools, plugins, system, options, hookParts } = await this.buildAgentParamsFor(
       request,
       signal,
       extraFeatures
@@ -448,7 +438,7 @@ export class AiService extends BaseService {
       tools,
       system: request.system ?? system,
       options,
-      hookParts: [this.analyticsHookPart(model), ...hookParts]
+      hookParts
     })
 
     // prompt and messages are mutually exclusive in AI SDK; preserve that.
@@ -687,7 +677,7 @@ export class AiService extends BaseService {
     logger.info('embedMany started', { assistantId: request.assistantId, count: request.values.length })
     const signal = request.requestOptions?.signal
 
-    const { sdkConfig, model } = await this.buildAgentParamsFor(request, signal)
+    const { sdkConfig } = await this.buildAgentParamsFor(request, signal)
 
     const result = await aiCoreEmbedMany<AppProviderSettingsMap>(sdkConfig.providerId, sdkConfig.providerSettings, {
       model: sdkConfig.modelId,
@@ -695,7 +685,6 @@ export class AiService extends BaseService {
       ...(signal ? { abortSignal: signal } : {})
     })
 
-    this.trackUsage(model, { inputTokens: result.usage?.tokens ?? 0, outputTokens: 0 })
     return { embeddings: result.embeddings, usage: result.usage }
   }
 
@@ -823,27 +812,6 @@ export class AiService extends BaseService {
     const { provider, model, assistant } = this.getProviderAndModel(request)
     const built = await buildAgentParams({ request, signal, provider, model, assistant, extraFeatures })
     return { ...built, provider, model, assistant }
-  }
-
-  // ── Token usage tracking ──
-
-  private trackUsage(model: Model, usage?: { inputTokens?: number; outputTokens?: number }): void {
-    if (!usage || !model.providerId || !model.apiModelId) return
-    const inputTokens = usage.inputTokens ?? 0
-    const outputTokens = usage.outputTokens ?? 0
-    if (inputTokens === 0 && outputTokens === 0) return
-
-    try {
-      const analyticsService = application.get('AnalyticsService')
-      analyticsService.trackTokenUsage({
-        provider: model.providerId,
-        model: model.apiModelId ?? model.id,
-        input_tokens: inputTokens,
-        output_tokens: outputTokens
-      })
-    } catch {
-      // AnalyticsService may not be activated (data collection disabled)
-    }
   }
 
   /** Priority: explicit `uniqueModelId` > `assistant.modelId`. */

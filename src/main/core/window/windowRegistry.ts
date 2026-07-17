@@ -85,9 +85,9 @@ export const WINDOW_TYPE_REGISTRY: Partial<Record<WindowType, WindowTypeMetadata
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false,
-        webSecurity: false,
+        webSecurity: true,
         webviewTag: true,
-        allowRunningInsecureContent: true,
+        allowRunningInsecureContent: false,
         backgroundThrottling: false
         // zoomFactor depends on PreferenceService → injected via args.options
       }
@@ -121,7 +121,7 @@ export const WINDOW_TYPE_REGISTRY: Partial<Record<WindowType, WindowTypeMetadata
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
-        webSecurity: false
+        webSecurity: true
       }
     },
     behavior: {
@@ -196,7 +196,7 @@ export const WINDOW_TYPE_REGISTRY: Partial<Record<WindowType, WindowTypeMetadata
       },
       webPreferences: {
         sandbox: false,
-        webSecurity: false,
+        webSecurity: true,
         webviewTag: true,
         // REQUIRED: SubWindow hosts streaming LLM responses and WebSocket heartbeats;
         // Chromium's background-tab throttling would freeze the UI for seconds after
@@ -257,7 +257,7 @@ export const WINDOW_TYPE_REGISTRY: Partial<Record<WindowType, WindowTypeMetadata
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false,
-        webSecurity: false,
+        webSecurity: true,
         webviewTag: true
       }
     },

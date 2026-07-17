@@ -413,10 +413,12 @@ class FileStorage {
           return extracted.getBody()
         }
 
-        const data = await officeParser.parseOfficeAsync(filePath, {
-          tempFilesLocation: this.tempDir
-        })
-        return data
+        const document = await officeParser.parseOffice(filePath)
+        const { value } = await document.to('text')
+        if (typeof value !== 'string') {
+          throw new Error(`Office parser returned non-text output for ${filePath}`)
+        }
+        return value
       } catch (error) {
         logger.error('Failed to read document file:', error as Error)
         throw error

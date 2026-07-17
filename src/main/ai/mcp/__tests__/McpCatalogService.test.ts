@@ -2,7 +2,6 @@ import { BaseService } from '@main/core/lifecycle'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getById = vi.fn()
-const listServers = vi.fn()
 const listTools = vi.fn()
 const runtimeListResources = vi.fn()
 const runtimeListPrompts = vi.fn()
@@ -36,7 +35,7 @@ vi.mock('@application', async () => {
 })
 
 vi.mock('@data/services/McpServerService', () => ({
-  mcpServerService: { getById, list: listServers }
+  mcpServerService: { getById, list: vi.fn() }
 }))
 
 const { McpCatalogService } = await import('../McpCatalogService')
@@ -64,7 +63,6 @@ describe('McpCatalogService', () => {
   beforeEach(() => {
     BaseService.resetInstances()
     getById.mockReset()
-    listServers.mockReset()
     listTools.mockReset()
     runtimeListResources.mockReset()
     runtimeListPrompts.mockReset()
@@ -117,21 +115,6 @@ describe('McpCatalogService', () => {
     expect(runtimeService.setServerStatus).toHaveBeenCalledWith('server-1', 'error', error)
   })
 
-  it('prewarms active server tools into shared cache', async () => {
-    listServers.mockReturnValue({ items: [server()], total: 1, page: 1 })
-    listTools.mockResolvedValue({ tools: [sdkTool('search')] })
-
-    const service = new McpCatalogService()
-    await (service as unknown as { prewarmActiveServerTools(): Promise<void> }).prewarmActiveServerTools()
-
-    expect(listServers).toHaveBeenCalledWith({ isActive: true })
-    expect(runtimeService.withClient).toHaveBeenCalled()
-    expect(cacheService.setShared).toHaveBeenCalledWith(
-      'mcp.tools.server-1',
-      expect.arrayContaining([expect.objectContaining({ name: 'search' })])
-    )
-  })
-
   it('listTools reads enabled tools from the shared cache without connecting', async () => {
     cacheStore.set('mcp.tools.server-1', [{ name: 'search' }, { name: 'blocked' }])
     getById.mockReturnValue(server({ disabledTools: ['blocked'] }))
@@ -154,15 +137,16 @@ describe('McpCatalogService', () => {
     expect(runtimeService.withClient).not.toHaveBeenCalled()
   })
 
-  it('listTools fires a one-shot refresh when the server was never warmed (cache undefined)', async () => {
+  it('listTools leaves a cold cache offline until an explicit warm or refresh', async () => {
     const service = new McpCatalogService()
     const refreshSpy = vi.spyOn(service, 'refreshTools').mockResolvedValue(undefined)
 
     expect(service.listTools('server-1')).toEqual([])
-    expect(refreshSpy).toHaveBeenCalledExactlyOnceWith('server-1')
+    expect(refreshSpy).not.toHaveBeenCalled()
+    expect(runtimeService.withClient).not.toHaveBeenCalled()
   })
 
-  it('listTools cold kick shares the warm single-flight instead of opening a second connection', async () => {
+  it('listTools does not open a second connection while an explicit warm is in flight', async () => {
     getById.mockReturnValue(server())
     listTools.mockResolvedValue({ tools: [sdkTool('search')] })
 

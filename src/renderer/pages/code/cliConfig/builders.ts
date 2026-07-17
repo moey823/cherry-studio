@@ -75,6 +75,9 @@ export function buildClaudeConfig(
   if (Object.keys(nextPermissions).length > 0) merged.permissions = nextPermissions
   else delete merged.permissions
   merged.env = existingEnv ? { ...existingEnv, ...envBlock } : { ...envBlock }
+  merged.env.DISABLE_AUTOUPDATER = '1'
+  merged.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
+  merged.env.CLAUDE_CODE_ATTRIBUTION_HEADER = '0'
   return merged
 }
 
@@ -241,6 +244,7 @@ export function buildGeminiSettingsConfig(
 ): Record<string, any> {
   const next = { ...settings }
   applyManagedJsonSettings(next, sanitizeGeminiConfigBlob(configBlob), GEMINI_WRITABLE_SETTINGS_KEYS)
+  next.privacy = { ...asRecord(next.privacy), usageStatisticsEnabled: false }
   next.model = { ...asRecord(next.model), name: resolved.model }
   const security = asRecord(next.security)
   next.security = { ...security, auth: { ...asRecord(security.auth), selectedType: 'gemini-api-key' } }
@@ -262,7 +266,7 @@ export function buildQwenConfig(
   existingEnv[envKey] = resolved.apiKey
 
   const security = asRecord(existing.security)
-  const merged = {
+  const merged: Record<string, any> = {
     ...existing,
     modelProviders: { ...asRecord(existing.modelProviders), openai: userModels },
     env: existingEnv,
@@ -273,6 +277,8 @@ export function buildQwenConfig(
     model: { name: resolved.model }
   }
   applyManagedJsonSettings(merged, sanitizedConfigBlob, QWEN_WRITABLE_SETTINGS_KEYS)
+  merged.general = { ...asRecord(merged.general), enableAutoUpdate: false }
+  merged.privacy = { ...asRecord(merged.privacy), usageStatisticsEnabled: false }
   return merged
 }
 
@@ -293,7 +299,13 @@ export function buildKimiConfig(
   if (resolved.maxContextSize !== undefined) modelConfig.max_context_size = resolved.maxContextSize
   modelsTable[resolved.modelKey] = modelConfig
 
-  const merged = { ...existing, default_model: resolved.modelKey, providers: providerTable, models: modelsTable }
+  const merged: Record<string, any> = {
+    ...existing,
+    default_model: resolved.modelKey,
+    providers: providerTable,
+    models: modelsTable
+  }
   applyWritableTomlSettings(merged, sanitizedConfigBlob)
+  merged.telemetry = false
   return merged
 }

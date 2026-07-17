@@ -13,7 +13,7 @@ const DEFAULT_FEED_TEMPLATES: Record<UpdateMirror, string> = {
   github: `https://github.com/${GITHUB_REPO}/releases/download/{{tag}}`,
   gitcode: `https://gitcode.com/${GITCODE_REPO}/releases/download/{{tag}}`
 }
-const GITCODE_LATEST_FALLBACK = 'https://releases.cherry-ai.com'
+const GITCODE_LATEST_FALLBACK = `https://github.com/${GITHUB_REPO}/releases/download/{{tag}}`
 
 interface CliOptions {
   tag?: string
@@ -431,7 +431,7 @@ async function applyChannelUpdate(
       console.warn(
         `[update-app-upgrade-config] gitcode release page not ready for ${releaseInfo.tag}. Falling back to ${GITCODE_LATEST_FALLBACK}.`
       )
-      feedUrls.gitcode = GITCODE_LATEST_FALLBACK
+      feedUrls.gitcode = applyTemplate(GITCODE_LATEST_FALLBACK, releaseInfo)
     }
   }
 

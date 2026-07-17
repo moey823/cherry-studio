@@ -86,7 +86,7 @@ export class MigrationWindowManager {
       webPreferences: {
         preload: join(__dirname, '../preload/simplest.js'),
         sandbox: false,
-        webSecurity: false,
+        webSecurity: true,
         contextIsolation: true
       }
     })

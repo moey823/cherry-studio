@@ -53,7 +53,6 @@ const BasicDataSettings: React.FC = () => {
   const { setTimeoutTimer } = useTimer()
   const [skipBackupFile, setSkipBackupFile] = usePreference('data.backup.general.skip_backup_file')
   const [migrationDialog, setMigrationDialog] = useState<MigrationDialogState | null>(null)
-  const [enableDataCollection, setEnableDataCollection] = usePreference('app.privacy.data_collection.enabled')
 
   useEffect(() => {
     void ipcApi.request('app.get_info').then(setAppInfo)
@@ -504,19 +503,6 @@ const BasicDataSettings: React.FC = () => {
               {t('settings.general.reset.title')}
             </Button>
           </RowFlex>
-        </SettingRow>
-      </SettingGroup>
-      <SettingGroup theme={theme}>
-        <SettingTitle>{t('settings.privacy.title')}</SettingTitle>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>{t('settings.privacy.enable_privacy_mode')}</SettingRowTitle>
-          <Switch
-            checked={enableDataCollection}
-            onCheckedChange={(v) => {
-              void setEnableDataCollection(v)
-            }}
-          />
         </SettingRow>
       </SettingGroup>
     </>

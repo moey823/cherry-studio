@@ -49,10 +49,6 @@ export function configureChromiumFlags(): void {
   }
 
   // Unconditional Chromium feature flags:
-  // - DocumentPolicyIncludeJSCallStacksInCrashReports: capture JS call stacks
-  //   when the renderer is unresponsive (paired with the web-contents-created
-  //   handler in preboot/crashTelemetry.ts that sets the Document-Policy
-  //   response header).
   // - EarlyEstablishGpuChannel + EstablishGpuChannelAsync: open the GPU IPC
   //   channel early to speed up first-paint.
   // - PageAllocatorRetryOnCommitFailure: retry memory page commits under
@@ -60,6 +56,6 @@ export function configureChromiumFlags(): void {
   // https://github.com/microsoft/vscode/pull/241640/files
   app.commandLine.appendSwitch(
     'enable-features',
-    'DocumentPolicyIncludeJSCallStacksInCrashReports,EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PageAllocatorRetryOnCommitFailure'
+    'EarlyEstablishGpuChannel,EstablishGpuChannelAsync,PageAllocatorRetryOnCommitFailure'
   )
 }

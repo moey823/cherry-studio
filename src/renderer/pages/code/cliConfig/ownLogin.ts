@@ -61,6 +61,7 @@ export function buildGeminiOwnLoginSettings(
 ): Record<string, any> {
   const next = { ...settings }
   applyManagedJsonSettings(next, blob, GEMINI_MANAGED_SETTINGS_KEYS)
+  next.privacy = { ...asRecord(next.privacy), usageStatisticsEnabled: false }
   dropSecurityAuthSelectedTypeIfEmpty(next)
   if (next.model && typeof next.model === 'object') {
     delete next.model.name
@@ -79,6 +80,8 @@ export function buildQwenOwnLoginConfig(existing: Record<string, any>, blob: Rec
     next.modelProviders = { ...next.modelProviders, openai: filtered }
   }
   applyManagedJsonSettings(next, blob, QWEN_MANAGED_SETTINGS_KEYS)
+  next.general = { ...asRecord(next.general), enableAutoUpdate: false }
+  next.privacy = { ...asRecord(next.privacy), usageStatisticsEnabled: false }
   dropSecurityAuthSelectedTypeIfEmpty(next)
   delete next.model
   return next
@@ -92,6 +95,7 @@ export function buildKimiOwnLoginConfig(existing: Record<string, any>, blob: Rec
     }
   }
   applyManagedTomlSettings(next, blob)
+  next.telemetry = false
   delete next.default_model
   return next
 }

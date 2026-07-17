@@ -97,6 +97,7 @@ export class AiSdkToAnthropicSse extends BaseStreamAdapter<RawMessageStreamEvent
       container: NULL_CONTAINER,
       model: this.state.model,
       stop_reason: null,
+      stop_details: null,
       stop_sequence: null,
       usage
     }
@@ -463,6 +464,7 @@ export class AiSdkToAnthropicSse extends BaseStreamAdapter<RawMessageStreamEvent
       delta: {
         container: NULL_CONTAINER,
         stop_reason: (this.state.stopReason as StopReason) || 'end_turn',
+        stop_details: null,
         stop_sequence: null
       },
       usage
@@ -523,6 +525,7 @@ export class AiSdkToAnthropicSse extends BaseStreamAdapter<RawMessageStreamEvent
       container: NULL_CONTAINER,
       model: this.state.model,
       stop_reason: (this.state.stopReason as StopReason) || 'end_turn',
+      stop_details: null,
       stop_sequence: null,
       usage: {
         input_tokens: this.state.inputTokens,

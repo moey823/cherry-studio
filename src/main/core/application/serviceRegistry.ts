@@ -23,11 +23,9 @@ import { ApiGatewayService } from '@main/features/apiGateway/ApiGatewayService'
 import { FileProcessingService, TesseractRuntimeService } from '@main/features/fileProcessing'
 import { KnowledgeService, KnowledgeVectorStoreService } from '@main/features/knowledge'
 import { IpcApiService } from '@main/ipc/IpcApiService'
-import { AnalyticsService } from '@main/services/AnalyticsService'
 import { AppMenuService } from '@main/services/AppMenuService'
 import { AppUpdaterService } from '@main/services/AppUpdaterService'
 import { BinaryManager } from '@main/services/BinaryManager'
-import { CitationPreviewService } from '@main/services/CitationPreviewService'
 import { CodeCliService } from '@main/services/codeCli'
 import { CommandService } from '@main/services/CommandService'
 import { DirectoryTreeManager, FileManager } from '@main/services/file'
@@ -83,11 +81,9 @@ export const services = {
   SubWindowService,
   PreferenceService,
   TesseractRuntimeService,
-  AnalyticsService,
   AppMenuService,
   CodeCliService,
   CommandService,
-  CitationPreviewService,
   LanTransferService,
   FileManager,
   DirectoryTreeManager,

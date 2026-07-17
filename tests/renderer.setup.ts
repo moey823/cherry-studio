@@ -451,44 +451,80 @@ vi.mock('@cherrystudio/ui', () => {
           )
         )
       ),
-    ImagePreviewDialog: ({ activeIndex = 0, items = [], labels = {}, onOpenChange, open, toolbarActions = [] }) =>
-      open
-        ? React.createElement(
-            'div',
-            { 'data-testid': 'image-preview-dialog' },
-            items[activeIndex]
-              ? React.createElement('img', {
-                  alt: items[activeIndex].alt,
-                  src: items[activeIndex].src
-                })
-              : null,
-            toolbarActions.map((action) =>
-              React.createElement(
-                'button',
-                {
-                  disabled: action.disabled,
-                  key: action.id,
-                  onClick: () =>
-                    action.onSelect?.(items[activeIndex], {
-                      close: () => onOpenChange?.(false),
-                      index: activeIndex,
-                      items,
-                      resetTransform: vi.fn(),
-                      transform: { flipX: false, flipY: false, rotate: 0, scale: 1 }
-                    }),
-                  type: 'button'
-                },
-                action.icon,
-                action.label
-              )
-            ),
-            React.createElement(
+    ImagePreviewDialog: ({
+      activeIndex = 0,
+      items = [],
+      labels = {},
+      onActiveIndexChange,
+      onOpenChange,
+      open,
+      renderImage,
+      toolbarActions = []
+    }) => {
+      if (!open) {
+        return null
+      }
+
+      const item = items[activeIndex]
+      const transform = { flipX: false, flipY: false, rotate: 0, scale: 1 }
+
+      return React.createElement(
+        'div',
+        { 'data-testid': 'image-preview-dialog' },
+        items.length > 1
+          ? React.createElement(
               'button',
-              { 'aria-label': labels.close, onClick: () => onOpenChange?.(false), type: 'button' },
-              labels.close
+              {
+                'aria-label': labels.previous,
+                onClick: () => onActiveIndexChange?.((activeIndex - 1 + items.length) % items.length),
+                type: 'button'
+              },
+              labels.previous
             )
+          : null,
+        item
+          ? (renderImage?.(item, {
+              transform: { reset: vi.fn(), transform }
+            }) ?? React.createElement('img', { alt: item.alt, src: item.src }))
+          : null,
+        items.length > 1
+          ? React.createElement(
+              'button',
+              {
+                'aria-label': labels.next,
+                onClick: () => onActiveIndexChange?.((activeIndex + 1) % items.length),
+                type: 'button'
+              },
+              labels.next
+            )
+          : null,
+        toolbarActions.map((action) =>
+          React.createElement(
+            'button',
+            {
+              disabled: action.disabled,
+              key: action.id,
+              onClick: () =>
+                action.onSelect?.(item, {
+                  close: () => onOpenChange?.(false),
+                  index: activeIndex,
+                  items,
+                  resetTransform: vi.fn(),
+                  transform
+                }),
+              type: 'button'
+            },
+            action.icon,
+            action.label
           )
-        : null,
+        ),
+        React.createElement(
+          'button',
+          { 'aria-label': labels.close, onClick: () => onOpenChange?.(false), type: 'button' },
+          labels.close
+        )
+      )
+    },
     ImagePreviewImage: ({ item, ...props }) =>
       React.createElement('img', { ...props, alt: item?.alt, src: item?.src, 'data-testid': 'image-preview-image' }),
     ImagePreviewToolbar: ({ actions = [], context, item, labels = {}, onClose }) =>

@@ -1,4 +1,4 @@
-import { CHERRYAI_DEFAULT_UNIQUE_MODEL_ID, CHERRYAI_PROVIDER_ID } from '@shared/data/presets/cherryai'
+import { CHERRYAI_PROVIDER_ID } from '@shared/data/presets/cherryai'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@shared/data/types/assistant'
 import { describe, expect, it } from 'vitest'
 
@@ -88,12 +88,12 @@ describe('AssistantMappings', () => {
       expect(result.assistant.modelId).toBe('openai::gpt-3.5')
     })
 
-    it('should map legacy CherryAI model refs to the seeded Qwen model', () => {
+    it('should preserve an explicitly configured legacy CherryAI model ref', () => {
       const result = transformAssistant({
         id: 'ast-4c',
         model: { id: 'legacy-qwen', provider: CHERRYAI_PROVIDER_ID }
       })
-      expect(result.assistant.modelId).toBe(CHERRYAI_DEFAULT_UNIQUE_MODEL_ID)
+      expect(result.assistant.modelId).toBe('cherryai::legacy-qwen')
     })
 
     it('should set modelId to null when model provider is not a string', () => {

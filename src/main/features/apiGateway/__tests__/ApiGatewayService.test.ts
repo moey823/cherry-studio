@@ -20,10 +20,6 @@ vi.mock('../server', () => ({
   ApiGateway: vi.fn(() => ({ start: mockStart, stop: mockStop, isRunning: () => true }))
 }))
 
-vi.mock('@data/services/AgentService', () => ({
-  agentService: { listAgents: vi.fn(async () => ({ total: 0 })) }
-}))
-
 vi.mock('@application', async () => {
   const { mockApplicationFactory } = await import('@test-mocks/main/application')
   return mockApplicationFactory({
@@ -61,6 +57,15 @@ beforeEach(() => {
 })
 
 describe('ApiGatewayService reconcile', () => {
+  it('does not open the local gateway during startup', async () => {
+    const service = new ApiGatewayService()
+
+    await service._doInit()
+
+    expect(mockStart).not.toHaveBeenCalled()
+    expect(service.isActivated).toBe(false)
+  })
+
   it('honors an opposing toggle that lands during an in-flight activation (no dropped toggle)', async () => {
     const service = new ApiGatewayService()
     await service._doInit() // Ready; desiredEnabled=false; reconcile is a no-op.
